@@ -32,7 +32,7 @@ jobs:
           protocol: ftp
           port: 21
           local-dir:  ./enternstech/
-          server-dir: /home3/seveleme/public_html/enternstech/wp-content/themes/enternstech/
+          server-dir: /home3/seveleme/public_html/enternstech/wp-content/themes/enternstech-theme/
           dangerous-clean-slate: false
           exclude: |
             **/.git*
