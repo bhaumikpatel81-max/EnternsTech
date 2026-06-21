@@ -216,7 +216,60 @@ function enternstech_paypal_capture_order( WP_REST_Request $request ) {
 	if ( is_wp_error( $response ) ) {
 		return new WP_REST_Response( array( 'error' => $response->get_error_message() ), 500 );
 	}
-	return new WP_REST_Response( json_decode( wp_remote_retrieve_body( $response ), true ), 200 );
+
+	$data = json_decode( wp_remote_retrieve_body( $response ), true );
+
+	// Log completed payment to the admin dashboard database table.
+	if ( ! empty( $data['status'] ) && $data['status'] === 'COMPLETED' ) {
+		enternstech_log_transaction( $order_id, $data );
+	}
+
+	return new WP_REST_Response( $data, 200 );
+}
+
+function enternstech_log_transaction( string $order_id, array $data ): void {
+	global $wpdb;
+	$table = $wpdb->prefix . 'et_transactions';
+
+	// Ensure table exists (admin portal creates it on first load, but create here too).
+	$wpdb->query( "CREATE TABLE IF NOT EXISTS `{$table}` (
+		id          INT AUTO_INCREMENT PRIMARY KEY,
+		order_id    VARCHAR(60)   NOT NULL,
+		plan        VARCHAR(120)  DEFAULT '',
+		amount      DECIMAL(10,2) NOT NULL,
+		currency    VARCHAR(3)    DEFAULT 'USD',
+		status      VARCHAR(20)   DEFAULT 'COMPLETED',
+		payer_name  VARCHAR(200)  DEFAULT '',
+		payer_email VARCHAR(200)  DEFAULT '',
+		created_at  DATETIME      DEFAULT CURRENT_TIMESTAMP,
+		INDEX (created_at)
+	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;" );
+
+	// Extract amount from the first purchase unit capture.
+	$amount   = 0.0;
+	$currency = 'USD';
+	$captures = $data['purchase_units'][0]['payments']['captures'] ?? array();
+	if ( ! empty( $captures[0]['amount']['value'] ) ) {
+		$amount   = (float) $captures[0]['amount']['value'];
+		$currency = $captures[0]['amount']['currency_code'] ?? 'USD';
+	}
+
+	$payer      = $data['payer'] ?? array();
+	$payer_name = trim( ( $payer['name']['given_name'] ?? '' ) . ' ' . ( $payer['name']['surname'] ?? '' ) );
+
+	$wpdb->insert(
+		$table,
+		array(
+			'order_id'    => $order_id,
+			'plan'        => $data['purchase_units'][0]['description'] ?? '',
+			'amount'      => $amount,
+			'currency'    => $currency,
+			'status'      => $data['status'],
+			'payer_name'  => $payer_name,
+			'payer_email' => $payer['email_address'] ?? '',
+		),
+		array( '%s', '%s', '%f', '%s', '%s', '%s', '%s' )
+	);
 }
 
 // Expose the PayPal client id + env to the front-end so the bundle can load

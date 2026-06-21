@@ -1,0 +1,20 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+*.log
+.vscode/
+.idea/
+
+# Node (not required at runtime, but in case you add tooling)
+node_modules/
+npm-debug.log*
+
+# Never commit secrets
+wp-config.php
+*.env
+.env
+admin-portal/config.php
+
+# Local archives
+*.zip
+!enternstech-wordpress-theme.zip

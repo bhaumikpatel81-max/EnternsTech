@@ -1,0 +1,68 @@
+name: Deploy to Bluehost
+
+# Deploys both the WordPress theme AND the admin portal to Bluehost over FTPS
+# whenever you push to the main branch.
+#
+# ONE-TIME SETUP — add these repository secrets:
+#   Settings → Secrets and variables → Actions → New repository secret
+#
+#   FTP_SERVER    e.g. ftp.enternstech.com  (from Bluehost → Files → FTP Accounts)
+#   FTP_USERNAME  your Bluehost FTP username
+#   FTP_PASSWORD  your Bluehost FTP password
+#
+# After deploy completes:
+#   1. WordPress admin → Appearance → Themes → Activate "enternstech"
+#   2. WordPress admin → Settings → Reading → set Front page to "Static page"
+#   3. Create admin-portal/config.php on the server (see config.example.php)
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:        # allows manual trigger from the GitHub Actions tab
+
+jobs:
+  deploy-theme:
+    name: Deploy WordPress Theme
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Upload theme via FTPS
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server:   ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          protocol: ftps
+          local-dir:  ./enternstech/
+          server-dir: public_html/wp-content/themes/enternstech/
+          dangerous-clean-slate: false
+          exclude: |
+            **/.git*
+            **/.git*/**
+            **/README.md
+            **/.github/**
+
+  deploy-admin-portal:
+    name: Deploy Admin Portal
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Upload admin portal via FTPS
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server:   ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          protocol: ftps
+          local-dir:  ./admin-portal/
+          server-dir: public_html/admin-portal/
+          dangerous-clean-slate: false
+          exclude: |
+            **/.git*
+            **/.git*/**
+            # Never deploy the real config — only the example
+            config.php
