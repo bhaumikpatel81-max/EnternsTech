@@ -1,19 +1,14 @@
 name: Deploy to Bluehost
 
-# Deploys both the WordPress theme AND the admin portal to Bluehost over FTPS
+# Deploys both the WordPress theme AND the admin portal to Bluehost over FTP
 # whenever you push to the main branch.
 #
 # ONE-TIME SETUP — add these repository secrets:
 #   Settings → Secrets and variables → Actions → New repository secret
 #
-#   FTP_SERVER    e.g. ftp.enternstech.com  (from Bluehost → Files → FTP Accounts)
-#   FTP_USERNAME  your Bluehost FTP username
-#   FTP_PASSWORD  your Bluehost FTP password
-#
-# After deploy completes:
-#   1. WordPress admin → Appearance → Themes → Activate "enternstech"
-#   2. WordPress admin → Settings → Reading → set Front page to "Static page"
-#   3. Create admin-portal/config.php on the server (see config.example.php)
+#   FTP_SERVER    ftp.7elementstore.com
+#   FTP_USERNAME  deploy@enternstech.com
+#   FTP_PASSWORD  the password you set when creating the FTP account in Bluehost
 
 on:
   push:
@@ -28,15 +23,16 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Upload theme via FTPS
+      - name: Upload theme via FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
           server:   ${{ secrets.FTP_SERVER }}
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
-          protocol: ftps
+          protocol: ftp
+          port: 21
           local-dir:  ./enternstech/
-          server-dir: public_html/wp-content/themes/enternstech/
+          server-dir: /home3/seveleme/public_html/wp-content/themes/enternstech/
           dangerous-clean-slate: false
           exclude: |
             **/.git*
@@ -51,18 +47,18 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Upload admin portal via FTPS
+      - name: Upload admin portal via FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
           server:   ${{ secrets.FTP_SERVER }}
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
-          protocol: ftps
+          protocol: ftp
+          port: 21
           local-dir:  ./admin-portal/
-          server-dir: public_html/admin-portal/
+          server-dir: /home3/seveleme/public_html/admin-portal/
           dangerous-clean-slate: false
           exclude: |
             **/.git*
             **/.git*/**
-            # Never deploy the real config — only the example
             config.php
