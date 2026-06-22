@@ -524,7 +524,7 @@ footer{background:rgba(0,0,0,.6);border-top:1px solid var(--border);padding:60px
       </div>
 
       <h1 class="et-hero-h1">
-        From Learning<br>to <span>Employment</span><br>— Guaranteed.
+        From learning<br>to <span>employment.</span>
       </h1>
 
       <p class="et-hero-sub">
