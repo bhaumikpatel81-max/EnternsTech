@@ -7,6 +7,27 @@
  * @package EnternsTech
  */
 
+// ══════════════════════════════════════════════════════════════════════════════
+// EDITABLE: Recently-placed scenarios shown in the hero floating cards.
+//
+// Each entry cycles through the placement badge (top-right card) and the
+// secondary info card. Add as many rows as you like; the hero badge will
+// rotate through them every ~3 seconds.
+//
+//   'role'     — job title shown in the floating badge
+//   'weeks'    — training duration in weeks
+//   'company'  — employer name (shown in the secondary card)
+//   'initials' — 2-letter avatar label inside the badge dot
+// ══════════════════════════════════════════════════════════════════════════════
+$et_placements = array(
+	array( 'role' => 'Data Scientist',       'weeks' => 11, 'company' => 'Infosys',   'initials' => 'DS' ),
+	array( 'role' => 'Java Developer',        'weeks' =>  9, 'company' => 'TCS',       'initials' => 'JD' ),
+	array( 'role' => 'DevOps Engineer',       'weeks' => 13, 'company' => 'Wipro',     'initials' => 'DO' ),
+	array( 'role' => 'Business Analyst',      'weeks' => 15, 'company' => 'Accenture', 'initials' => 'BA' ),
+	array( 'role' => 'Cybersecurity Analyst', 'weeks' => 12, 'company' => 'HCL',       'initials' => 'CA' ),
+	array( 'role' => 'Full Stack Developer',  'weeks' => 10, 'company' => 'Capgemini', 'initials' => 'FS' ),
+);
+
 while ( ob_get_level() ) {
 	ob_end_clean();
 }
@@ -19,7 +40,7 @@ if ( file_exists( $bundled ) ) {
 	header( 'Cache-Control: no-cache, no-store, must-revalidate' );
 	header( 'Pragma: no-cache' );
 	header( 'Expires: 0' );
-	header( 'X-LiteSpeed-Cache-Control: no-cache' ); // Bluehost/LiteSpeed bypass
+	header( 'X-LiteSpeed-Cache-Control: no-cache' );
 
 	$html = file_get_contents( $bundled );
 
@@ -41,15 +62,20 @@ if ( file_exists( $bundled ) ) {
 			. '&currency=USD" data-namespace="enternsPayPal"></script>';
 	}
 
-	// ── Stub Design-Canvas component methods called as globals ────────────────
+	// ── Stub Design-Canvas component methods called as globals ─────────────────
 	$inject .= '<script>window.closeAdmin=function(){};window.openAdmin=function(){};</script>';
 
-	// ── Base CSS: loading screen, dark bg, cross-browser basics ───────────────
+	// ── Base CSS ───────────────────────────────────────────────────────────────
+	// #__bundler_loading  — "Unpacking…" text badge — hidden immediately.
+	// #__bundler_thumbnail — full-screen SVG overlay (z-index 9999) that covers
+	//   the real floatcards — hidden immediately so users see the rendered site.
+	//   The bundle's own JS would normally remove this, but hiding it via CSS
+	//   ensures it never flashes even if JS is momentarily slow.
 	$inject .= '
 <style>
 #__bundler_loading{display:none!important;}
+#__bundler_thumbnail{display:none!important;}
 html,body{background:#05080F!important;overflow-x:hidden!important;}
-#__bundler_thumbnail{background:#05080F!important;}
 *{-webkit-tap-highlight-color:transparent;box-sizing:border-box;}
 input,button,select,textarea{font-size:16px!important;}
 @supports not (backdrop-filter:blur(1px)){
@@ -59,18 +85,19 @@ input,button,select,textarea{font-size:16px!important;}
 
 	$html = preg_replace( '#</head>#i', $inject . '</head>', $html, 1 );
 
-	// ── Cycling + mobile fixes — runs after Design Canvas renders ─────────────
+	// ── Placement cycling + floatcard data injection ───────────────────────────
+	// ET_PLACEMENTS comes from the PHP array at the top of this file.
+	// To add a new "recently placed" scenario, add a row to $et_placements above.
+	$placements_json = wp_json_encode( $et_placements );
+
 	$cycling_script = '
 <script>
 (function(){
-  var placements=[
-    "Data Scientist · 11 weeks",
-    "Java Developer · 9 weeks",
-    "DevOps Engineer · 13 weeks",
-    "Business Analyst · 15 weeks",
-    "Cybersecurity Analyst · 12 weeks",
-    "Full Stack Developer · 10 weeks"
-  ];
+  /* ── Data from PHP — edit $et_placements in front-page.php to change these ── */
+  var ET_PLACEMENTS=' . $placements_json . ';
+
+  /* Plain text labels for the badge text node */
+  var labels=ET_PLACEMENTS.map(function(p){return p.role+"·"+p.weeks+" weeks";});
   var idx=0,cycleStarted=false,mobileFixed=false;
 
   /* ── Find the placement badge text node ── */
@@ -89,16 +116,42 @@ input,button,select,textarea{font-size:16px!important;}
     return null;
   }
 
-  /* ── Cycle the placement text ── */
+  /* ── Cycle the placement text in the badge ── */
   function startCycling(el){
     if(cycleStarted)return;cycleStarted=true;
     setInterval(function(){
       el.style.transition="opacity 0.4s";el.style.opacity="0";
-      setTimeout(function(){idx=(idx+1)%placements.length;el.textContent=placements[idx];el.style.opacity="1";},420);
+      setTimeout(function(){
+        idx=(idx+1)%labels.length;
+        el.textContent=labels[idx];
+        el.style.opacity="1";
+      },420);
     },3200);
   }
 
-  /* ── Mobile layout fixes applied via JS (more reliable than CSS attr selectors) ── */
+  /* ── Update the secondary floatcard (data-depth="2.4") with a different entry ── */
+  function updateFloatCards(){
+    var cards=document.querySelectorAll(".et-floatcard[data-depth]");
+    cards.forEach(function(card){
+      var depth=card.getAttribute("data-depth");
+      if(depth!=="2.4") return;
+      var p=ET_PLACEMENTS[1]||ET_PLACEMENTS[0]; /* show 2nd placement in secondary card */
+      var nodes=card.querySelectorAll("span,div,p");
+      for(var i=0;i<nodes.length;i++){
+        var t=nodes[i].textContent.trim();
+        if(nodes[i].children.length===0&&t.indexOf("weeks")>-1){
+          nodes[i].textContent=p.role+" · "+p.weeks+" weeks";
+          break;
+        }
+        if(nodes[i].children.length===0&&(t.indexOf("Placed at")>-1||t.indexOf("placed at")>-1)){
+          nodes[i].textContent="Placed at "+p.company;
+          break;
+        }
+      }
+    });
+  }
+
+  /* ── Mobile layout fixes applied via JS (reliable across DC-generated markup) ── */
   function applyMobileFix(){
     if(mobileFixed||window.innerWidth>900)return;mobileFixed=true;
     var divs=document.querySelectorAll("div");
@@ -106,44 +159,35 @@ input,button,select,textarea{font-size:16px!important;}
       var s=divs[i].style;
       if(!s)continue;
       var gc=s.gridTemplateColumns||"";
-      /* Stack any 2-column split layout */
       if(gc.indexOf("1fr 1fr")>-1||gc.indexOf("1fr 2fr")>-1||gc.indexOf("2fr 1fr")>-1||
          gc.indexOf("1fr 3fr")>-1||gc.indexOf("3fr 1fr")>-1){
         s.gridTemplateColumns="1fr";s.gap="32px";
       }
-      /* 3-col → 1 col on mobile */
       if(gc.indexOf("repeat(3")>-1){s.gridTemplateColumns="1fr";}
-      /* 5-col journey → 2 col */
       if(gc.indexOf("repeat(5")>-1){s.gridTemplateColumns="repeat(2,1fr)";}
-      /* 4-col → 2 col */
       if(gc.indexOf("repeat(4")>-1){s.gridTemplateColumns="repeat(2,1fr)";}
-      /* Clamp any element wider than viewport */
       var w=s.width||"";
       if(w&&parseInt(w)>window.innerWidth&&w.indexOf("%")===-1&&w.indexOf("vw")===-1){
         s.width="100%";s.maxWidth="100vw";
       }
-      /* Remove fixed positioning that causes overflow */
       var pos=s.position||"";
       var right=s.right||"";
       if(pos==="absolute"&&right&&parseInt(right)<0){s.right="0";}
     }
-    /* Force body to not overflow */
     document.body.style.overflowX="hidden";
     document.documentElement.style.overflowX="hidden";
   }
 
-  /* ── Poll until DC renders (checks every 400ms, gives up at 25s) ── */
+  /* ── Poll until DC renders (checks every 400 ms, gives up at 25 s) ── */
+  /* Note: #__bundler_thumbnail is hidden via CSS so we do NOT wait for it here. */
   var attempts=0;
   var poll=setInterval(function(){
     attempts++;
     var el=findPlacementEl();
     if(el) startCycling(el);
     applyMobileFix();
-    /* Check if DC finished rendering (thumbnail hidden = done) */
-    var thumb=document.getElementById("__bundler_thumbnail");
-    var dcDone=!thumb||thumb.style.display==="none"||getComputedStyle(thumb).display==="none";
-    if(dcDone&&el){clearInterval(poll);return;}
-    if(attempts>62){clearInterval(poll);}
+    if(attempts===2) updateFloatCards(); /* update secondary card after bundle renders */
+    if(cycleStarted&&mobileFixed||attempts>62){clearInterval(poll);}
   },400);
 })();
 </script>';

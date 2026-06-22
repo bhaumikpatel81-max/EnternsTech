@@ -40,11 +40,12 @@ add_action( 'after_setup_theme', 'enternstech_setup' );
 // Enqueue
 // ──────────────────────────────────────────────────────────────────────────────
 function enternstech_scripts() {
+	$ver = filemtime( get_template_directory() . '/style.css' ) ?: ENTERNSTECH_VERSION;
 	wp_enqueue_style(
 		'enternstech-style',
 		get_stylesheet_uri(),
 		array(),
-		ENTERNSTECH_VERSION
+		$ver
 	);
 }
 add_action( 'wp_enqueue_scripts', 'enternstech_scripts' );

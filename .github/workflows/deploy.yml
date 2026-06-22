@@ -1,14 +1,38 @@
-name: Deploy to Bluehost
+name: Deploy to Hostinger
 
-# Deploys both the WordPress theme AND the admin portal to Bluehost over FTP
+# Deploys both the WordPress theme AND the admin portal to Hostinger over FTP
 # whenever you push to the main branch.
 #
-# ONE-TIME SETUP — add these repository secrets:
-#   Settings → Secrets and variables → Actions → New repository secret
+# ─────────────────────────────────────────────────────────────────────────────
+# ONE-TIME SETUP — add these three repository secrets:
+#   GitHub repo → Settings → Secrets and variables → Actions → New repository secret
 #
-#   FTP_SERVER    ftp.7elementstore.com
-#   FTP_USERNAME  deploy@enternstech.com
-#   FTP_PASSWORD  the password you set when creating the FTP account in Bluehost
+#   Secret name      Where to find the value in Hostinger
+#   ───────────────  ──────────────────────────────────────────────────────────
+#   FTP_SERVER       hPanel → Hosting → Manage → FTP Accounts
+#                    "FTP server" field — looks like: ftp.enternstech.com
+#                    (or the server IP shown in hPanel → Details / Server info)
+#
+#   FTP_USERNAME     hPanel → Hosting → Manage → FTP Accounts
+#                    The username of the FTP account you created, e.g.:
+#                    u123456789.enternstech   (Hostinger format)
+#
+#   FTP_PASSWORD     The password you set when creating that FTP account.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# HOSTINGER PATH NOTE:
+#   The server-dir below assumes WordPress is installed at the root of your
+#   domain (public_html/).  If Hostinger shows a different base path in their
+#   File Manager, adjust accordingly.
+#
+#   Hostinger FTP root = /  which maps to your home directory.
+#   public_html/ is usually the web root for your primary domain.
+#
+#   Theme folder name "enternstech" must match the folder WordPress has
+#   activated under Appearance → Themes.  If the folder on the server is
+#   currently named something else, either rename it in File Manager first
+#   or update server-dir here to match.
+# ─────────────────────────────────────────────────────────────────────────────
 
 on:
   push:
@@ -32,7 +56,7 @@ jobs:
           protocol: ftp
           port: 21
           local-dir:  ./enternstech/
-          server-dir: /home3/seveleme/public_html/enternstech/wp-content/themes/enternstech-theme/
+          server-dir: /public_html/wp-content/themes/enternstech/
           dangerous-clean-slate: false
           exclude: |
             **/.git*
@@ -56,7 +80,7 @@ jobs:
           protocol: ftp
           port: 21
           local-dir:  ./admin-portal/
-          server-dir: /home3/seveleme/public_html/enternstech/admin-portal/
+          server-dir: /public_html/admin-portal/
           dangerous-clean-slate: false
           exclude: |
             **/.git*
