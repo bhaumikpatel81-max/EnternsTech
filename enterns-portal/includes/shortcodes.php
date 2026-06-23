@@ -40,10 +40,18 @@ function enp_maybe_enqueue_assets() {
 		true
 	);
 	wp_localize_script( 'enp-portal', 'ENP', array(
-		'ajaxUrl' => admin_url( 'admin-ajax.php' ),
-		'nonce'   => wp_create_nonce( 'enp_portal' ),
-		'homeUrl' => esc_url( home_url() ),
+		'ajaxUrl'       => admin_url( 'admin-ajax.php' ),
+		'nonce'         => wp_create_nonce( 'enp_portal' ),
+		'rzpNonce'      => wp_create_nonce( 'enp_razorpay' ),
+		'rzpConfigured' => function_exists( 'enp_razorpay_configured' ) && enp_razorpay_configured(),
+		'homeUrl'       => esc_url( home_url() ),
+		'studentUrl'    => esc_url( home_url( '/student/' ) ),
+		'currentEmail'  => is_user_logged_in() ? wp_get_current_user()->user_email : '',
 	) );
+
+	if ( function_exists( 'enp_razorpay_configured' ) && enp_razorpay_configured() ) {
+		wp_enqueue_script( 'razorpay-checkout', 'https://checkout.razorpay.com/v1/checkout.js', array(), null, true );
+	}
 }
 
 // ── [enp_admin] ───────────────────────────────────────────────────────────────

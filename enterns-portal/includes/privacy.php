@@ -32,3 +32,23 @@ function enp_student_for_mentor( $student ) {
 	);
 	return array_intersect_key( $student, array_flip( $allowed ) );
 }
+
+/**
+ * Return a mentor record stripped of fields students must not see.
+ *
+ * Removes: email, phone, admin_note, user_id.
+ *
+ * @param array|object $mentor Raw row from wp_enp_mentors.
+ * @return array Safe subset for student-facing display.
+ */
+function enp_mentor_for_student( $mentor ) {
+	if ( is_object( $mentor ) ) {
+		$mentor = (array) $mentor;
+	}
+	$allowed = array(
+		'id', 'full_name', 'photo_url', 'linkedin',
+		'tech_stack', 'available_slots', 'extra_fields',
+		'status', 'created_at',
+	);
+	return array_intersect_key( $mentor, array_flip( $allowed ) );
+}

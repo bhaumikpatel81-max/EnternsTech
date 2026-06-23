@@ -45,6 +45,41 @@ function enp_plan_sessions() {
 }
 
 /**
+ * Full plan display info — single source of truth for names and formatted prices.
+ *
+ * @return array plan_id => ['name', 'price_display', 'paise', 'sessions']
+ */
+function enp_plan_catalog() {
+	return array(
+		'basic'       => array( 'name' => 'Basic Plan',              'price_display' => '₹1,50,000', 'paise' => 15000000, 'sessions' => 4 ),
+		'elite'       => array( 'name' => 'Elite Plan',               'price_display' => '₹2,50,000', 'paise' => 25000000, 'sessions' => 6 ),
+		'premium'     => array( 'name' => 'Premium Plan',             'price_display' => '₹3,50,000', 'paise' => 35000000, 'sessions' => 8 ),
+		'accelerator' => array( 'name' => 'Career Accelerator Combo', 'price_display' => '₹5,50,000', 'paise' => 55000000, 'sessions' => 8 ),
+		'starter'     => array( 'name' => 'Career Starter Combo',     'price_display' => '₹3,75,000', 'paise' => 37500000, 'sessions' => 6 ),
+	);
+}
+
+/**
+ * Return plans the student can upgrade to (all plans more expensive than current),
+ * sorted by price ascending.
+ *
+ * @param string $current_plan_id
+ * @return array plan_id => catalog entry
+ */
+function enp_upgrade_options( $current_plan_id ) {
+	$catalog  = enp_plan_catalog();
+	$current  = isset( $catalog[ $current_plan_id ] ) ? $catalog[ $current_plan_id ]['paise'] : 0;
+	$options  = array();
+	foreach ( $catalog as $id => $info ) {
+		if ( $info['paise'] > $current ) {
+			$options[ $id ] = $info;
+		}
+	}
+	uasort( $options, function ( $a, $b ) { return $a['paise'] - $b['paise']; } );
+	return $options;
+}
+
+/**
  * @return bool True when both Razorpay constants are defined in wp-config.php.
  */
 function enp_razorpay_configured() {

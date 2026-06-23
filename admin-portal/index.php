@@ -318,6 +318,92 @@ if ($logged_in && $action === 'mark_student_paid') {
     header('Location: ?section=payments&paid=1'); exit;
 }
 
+// Admin: override student sessions_total
+if ($logged_in && $action === 'set_student_sessions') {
+    if (!isset($_SESSION['enp_csrf']) || !hash_equals($_SESSION['enp_csrf'], $_POST['csrf'] ?? '')) {
+        http_response_code(403); die('CSRF mismatch.');
+    }
+    $sid  = intval($_POST['student_id']    ?? 0);
+    $sess = max(1, min(100, intval($_POST['sessions_total'] ?? 1)));
+    $db = get_db(); $p = DB_PREFIX;
+    $db->prepare("UPDATE `{$p}enp_students` SET sessions_total=? WHERE id=?")->execute([$sess, $sid]);
+    header('Location: ?section=students&updated_sessions=1'); exit;
+}
+
+// Admin: approve mentor change request
+if ($logged_in && $action === 'approve_mentor_change') {
+    if (!isset($_SESSION['enp_csrf']) || !hash_equals($_SESSION['enp_csrf'], $_POST['csrf'] ?? '')) {
+        http_response_code(403); die('CSRF mismatch.');
+    }
+    $req_id = intval($_POST['request_id'] ?? 0);
+    $db = get_db(); $p = DB_PREFIX;
+    $req_st = $db->prepare("SELECT r.*, s.email AS student_email, s.full_name AS student_name, s.id AS sid
+        FROM `{$p}enp_requests` r
+        JOIN `{$p}enp_students` s ON r.student_id = s.id
+        WHERE r.id = ? AND r.type = 'mentor_change' AND r.status = 'open' LIMIT 1");
+    $req_st->execute([$req_id]);
+    $req = $req_st->fetch();
+    if (!$req) { header('Location: ?section=requests&err=' . urlencode('Request not found or already processed.')); exit; }
+
+    $new_mentor_id = $req['mentor_id'] ? (int)$req['mentor_id'] : null;
+    $new_mentor_name = null;
+    if ($new_mentor_id) {
+        $db->prepare("UPDATE `{$p}enp_students` SET mentor_id=? WHERE id=?")->execute([$new_mentor_id, $req['sid']]);
+        $nm = $db->prepare("SELECT full_name FROM `{$p}enp_mentors` WHERE id=?");
+        $nm->execute([$new_mentor_id]);
+        $new_mentor_name = $nm->fetchColumn() ?: null;
+    } else {
+        $db->prepare("UPDATE `{$p}enp_students` SET mentor_id=NULL WHERE id=?")->execute([$req['sid']]);
+    }
+    $db->prepare("UPDATE `{$p}enp_requests` SET status='approved' WHERE id=?")->execute([$req_id]);
+
+    if (function_exists('enp_send_mail')) {
+        $sname = esc_html($req['student_name']);
+        $body  = "<h2 style='color:#22D3EE;margin:0 0 16px'>Mentor Change Approved</h2>";
+        $body .= "<p>Hi {$sname}, your mentor change request has been approved.</p>";
+        if ($new_mentor_name) {
+            $body .= "<p>Your new mentor is <strong>" . esc_html($new_mentor_name) . "</strong>.</p>";
+        } else {
+            $body .= "<p>Please log in to your student portal to select a new mentor.</p>";
+        }
+        $purl = function_exists('home_url') ? home_url('/student/') : '/student/';
+        $body .= "<p style='margin-top:1.5rem'><a href='" . esc_url($purl) . "' style='background:#22D3EE;color:#05080F;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:700'>Go to Portal &rarr;</a></p>";
+        enp_send_mail($req['student_email'], 'Mentor change approved — Enterns Tech', $body, true);
+    }
+    header('Location: ?section=requests&approved_change=1'); exit;
+}
+
+// Admin: deny mentor change request
+if ($logged_in && $action === 'deny_mentor_change') {
+    if (!isset($_SESSION['enp_csrf']) || !hash_equals($_SESSION['enp_csrf'], $_POST['csrf'] ?? '')) {
+        http_response_code(403); die('CSRF mismatch.');
+    }
+    $req_id    = intval($_POST['request_id'] ?? 0);
+    $admin_note = substr(strip_tags($_POST['admin_note'] ?? ''), 0, 500);
+    $db = get_db(); $p = DB_PREFIX;
+    $req_st = $db->prepare("SELECT r.*, s.email AS student_email, s.full_name AS student_name
+        FROM `{$p}enp_requests` r
+        JOIN `{$p}enp_students` s ON r.student_id = s.id
+        WHERE r.id = ? AND r.type = 'mentor_change' AND r.status = 'open' LIMIT 1");
+    $req_st->execute([$req_id]);
+    $req = $req_st->fetch();
+    if (!$req) { header('Location: ?section=requests&err=' . urlencode('Request not found.')); exit; }
+
+    $db->prepare("UPDATE `{$p}enp_requests` SET status='denied', admin_note=? WHERE id=?")->execute([$admin_note, $req_id]);
+
+    if (function_exists('enp_send_mail')) {
+        $sname = esc_html($req['student_name']);
+        $body  = "<h2 style='color:#22D3EE;margin:0 0 16px'>Mentor Change Update</h2>";
+        $body .= "<p>Hi {$sname}, we could not approve your mentor change request at this time.</p>";
+        if ($admin_note) {
+            $body .= "<p><strong>Note:</strong><br>" . nl2br(esc_html($admin_note)) . "</p>";
+        }
+        $body .= "<p>Please contact us if you have questions.</p>";
+        enp_send_mail($req['student_email'], 'Mentor change request update — Enterns Tech', $body, true);
+    }
+    header('Location: ?section=requests&denied_change=1'); exit;
+}
+
 // ── Dashboard data ────────────────────────────────────────────────────────────
 $stats = [];
 $monthly_labels  = [];
@@ -382,6 +468,7 @@ if ($logged_in) {
         $portal['students_active'] = (int) $db->query("SELECT COUNT(*) FROM `{$p}enp_students` WHERE status='active'")->fetchColumn();
         $portal['sessions_total']  = (int) $db->query("SELECT COUNT(*) FROM `{$p}enp_sessions`")->fetchColumn();
         $portal['payments_paid']   = (float) $db->query("SELECT COALESCE(SUM(amount),0) FROM `{$p}enp_payments` WHERE status='paid'")->fetchColumn();
+        $portal['requests_open']   = (int) $db->query("SELECT COUNT(*) FROM `{$p}enp_requests` WHERE type='mentor_change' AND status='open'")->fetchColumn();
     } catch (PDOException $e) {
         // Plugin tables not yet created — portal data will show zeros.
     }
@@ -396,6 +483,23 @@ if ($logged_in) {
     $portal_students = [];
     try {
         $portal_students = $db->query("SELECT s.*, m.full_name AS mentor_name FROM `{$p}enp_students` s LEFT JOIN `{$p}enp_mentors` m ON s.mentor_id = m.id ORDER BY s.created_at DESC LIMIT 100")->fetchAll();
+    } catch (PDOException $e) {}
+
+    // Mentor change requests for Requests tab.
+    $portal_requests = [];
+    try {
+        $portal_requests = $db->query("
+            SELECT r.*,
+                   s.full_name  AS student_name,  s.email AS student_email,
+                   cm.full_name AS current_mentor_name,
+                   rm.full_name AS requested_mentor_name
+            FROM `{$p}enp_requests` r
+            LEFT JOIN `{$p}enp_students` s  ON r.student_id = s.id
+            LEFT JOIN `{$p}enp_mentors`  cm ON s.mentor_id  = cm.id
+            LEFT JOIN `{$p}enp_mentors`  rm ON r.mentor_id  = rm.id
+            WHERE r.type = 'mentor_change'
+            ORDER BY r.created_at DESC LIMIT 100
+        ")->fetchAll();
     } catch (PDOException $e) {}
 }
 
@@ -641,6 +745,9 @@ HTML;
     </a>
     <a href="?section=mentors"       class="nav-tab <?= active_section('mentors') ?>">Mentors</a>
     <a href="?section=students"      class="nav-tab <?= active_section('students') ?>">Students</a>
+    <a href="?section=requests"      class="nav-tab <?= active_section('requests') ?>">
+      Requests<?php if (!empty($portal['requests_open'])): ?> <span class="nav-badge"><?= (int)$portal['requests_open'] ?></span><?php endif; ?>
+    </a>
     <a href="?section=sessions"      class="nav-tab <?= active_section('sessions') ?>">Sessions</a>
     <a href="?section=payments"      class="nav-tab <?= active_section('payments') ?>">Payments</a>
     <a href="?section=transactions"  class="nav-tab <?= active_section('transactions') ?>">Legacy Txns</a>
@@ -1046,32 +1153,156 @@ HTML;
   <?php elseif ($section === 'students'): ?>
   <!-- ── STUDENTS ───────────────────────────────────────────── -->
 
+    <?php if (isset($_GET['updated_sessions'])): ?>
+      <div class="success-banner">Sessions updated.</div>
+    <?php endif; ?>
+
     <div class="section-title">Students <span><?= (int)$portal['students_total'] ?> total</span></div>
-    <p style="color:var(--muted);font-size:.85rem;margin-bottom:1.25rem;">
-      Full student management (activate, assign mentor, override sessions) comes in Phase 4.
-    </p>
     <div class="card">
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Name</th><th>Plan</th><th>Sessions</th><th>Mentor</th><th>CV Redesign</th><th>Status</th><th>Enrolled</th></tr></thead>
+          <thead><tr><th>Name</th><th>Email</th><th>Plan</th><th>Sessions (used/total)</th><th>Mentor</th><th>CV Redesign</th><th>Status</th><th>Enrolled</th><th></th></tr></thead>
           <tbody>
           <?php if ($portal_students): foreach ($portal_students as $s): ?>
             <tr>
-              <td style="font-weight:600"><?= h($s['full_name']) ?></td>
+              <td style="font-weight:600"><?= h($s['full_name'] ?: '—') ?></td>
+              <td style="font-size:.8rem;color:var(--muted)"><?= h($s['email']) ?></td>
               <td><span class="badge badge-cyan"><?= h(strtoupper($s['plan_id'])) ?></span></td>
-              <td><?= (int)$s['sessions_used'] ?> / <?= (int)$s['sessions_total'] ?></td>
+              <td>
+                <?= (int)$s['sessions_used'] ?> / <?= (int)$s['sessions_total'] ?>
+              </td>
               <td style="font-size:.82rem"><?= $s['mentor_name'] ? h($s['mentor_name']) : '<span style="color:var(--muted)">Unassigned</span>' ?></td>
               <td><span class="badge <?= $s['cv_redesign_status']==='done' ? 'badge-green' : 'badge-gold' ?>"><?= h($s['cv_redesign_status']) ?></span></td>
-              <td><span class="badge <?= $s['status']==='active' ? 'badge-green' : '' ?>"><?= h($s['status']) ?></span></td>
-              <td style="font-size:.78rem;color:var(--muted)"><?= h(date('d M Y', strtotime($s['created_at']))) ?></td>
+              <td><span class="badge <?= $s['status']==='active' ? 'badge-green' : 'badge-muted' ?>"><?= h($s['status']) ?></span></td>
+              <td style="font-size:.78rem;color:var(--muted);white-space:nowrap"><?= h(date('d M Y', strtotime($s['created_at']))) ?></td>
+              <td>
+                <button class="btn-edit enp-set-sessions-btn"
+                        data-id="<?= (int)$s['id'] ?>"
+                        data-name="<?= h($s['full_name'] ?: $s['email']) ?>"
+                        data-current="<?= (int)$s['sessions_total'] ?>">
+                  Set Sessions
+                </button>
+              </td>
             </tr>
           <?php endforeach; else: ?>
-            <tr class="empty-row"><td colspan="7">No students enrolled yet.</td></tr>
+            <tr class="empty-row"><td colspan="9">No students enrolled yet.</td></tr>
           <?php endif; ?>
           </tbody>
         </table>
       </div>
     </div>
+
+    <!-- Set sessions modal -->
+    <div id="enp-sessions-modal" class="enp-modal-overlay">
+      <div class="enp-modal" style="max-width:400px">
+        <h3 style="margin:0 0 .25rem">Override Sessions</h3>
+        <p id="enp-sessions-modal-name" style="color:var(--cyan);margin:0 0 1.25rem;font-size:.9rem"></p>
+        <div class="form-group">
+          <label>Total sessions to allocate</label>
+          <input type="number" id="enp-sessions-input" min="1" max="100" style="width:100%">
+        </div>
+        <p style="color:var(--muted);font-size:.8rem;margin:.5rem 0 0">This overrides the plan default (4–8). You can set any value 1–100.</p>
+        <div class="enp-modal-actions">
+          <button class="btn-del" onclick="document.getElementById('enp-sessions-modal').classList.remove('open')">Cancel</button>
+          <button class="btn-add" id="enp-sessions-confirm">Save</button>
+        </div>
+      </div>
+    </div>
+    <form id="enp-sessions-form" method="POST" style="display:none">
+      <input type="hidden" name="action"         value="set_student_sessions">
+      <input type="hidden" name="csrf"           value="<?= h($csrf) ?>">
+      <input type="hidden" id="enp-sform-id"     name="student_id">
+      <input type="hidden" id="enp-sform-sessions" name="sessions_total">
+    </form>
+
+  <?php elseif ($section === 'requests'): ?>
+  <!-- ── MENTOR CHANGE REQUESTS ─────────────────────────────── -->
+
+    <?php if (isset($_GET['approved_change'])): ?>
+      <div class="success-banner">Mentor change approved — student notified.</div>
+    <?php elseif (isset($_GET['denied_change'])): ?>
+      <div class="success-banner" style="background:rgba(248,113,113,.08);border-color:rgba(248,113,113,.25);color:var(--red)">Request denied — student notified.</div>
+    <?php elseif (isset($_GET['err'])): ?>
+      <div class="success-banner" style="background:rgba(248,113,113,.08);border-color:rgba(248,113,113,.25);color:var(--red)">Error: <?= h($_GET['err']) ?></div>
+    <?php endif; ?>
+
+    <div class="section-title">
+      Mentor Change Requests <span><?= count($portal_requests) ?> total</span>
+      <?php if (!empty($portal['requests_open'])): ?>
+        <span style="background:rgba(251,191,36,.15);color:var(--gold);border-color:rgba(251,191,36,.3);"><?= (int)$portal['requests_open'] ?> open</span>
+      <?php endif; ?>
+    </div>
+    <div class="card">
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Student</th><th>Current Mentor</th><th>Requested Mentor</th><th>Reason</th><th>Date</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody>
+          <?php if ($portal_requests): foreach ($portal_requests as $req):
+            $payload   = json_decode($req['payload'] ?? '{}', true);
+            $reason    = $payload['reason'] ?? '—';
+            $stc       = ['open'=>'badge-gold','approved'=>'badge-green','denied'=>'badge-red'][$req['status']] ?? 'badge-muted';
+          ?>
+            <tr>
+              <td>
+                <div style="font-weight:600"><?= h($req['student_name'] ?? '—') ?></div>
+                <div style="font-size:.78rem;color:var(--muted)"><?= h($req['student_email'] ?? '') ?></div>
+              </td>
+              <td style="font-size:.85rem"><?= $req['current_mentor_name'] ? h($req['current_mentor_name']) : '<span style="color:var(--muted)">None</span>' ?></td>
+              <td style="font-size:.85rem"><?= $req['requested_mentor_name'] ? h($req['requested_mentor_name']) : '<span style="color:var(--muted)">Any</span>' ?></td>
+              <td style="font-size:.82rem;color:var(--muted);max-width:220px" title="<?= h($reason) ?>"><?= h(mb_substr($reason, 0, 100)) . (mb_strlen($reason) > 100 ? '…' : '') ?></td>
+              <td style="font-size:.78rem;color:var(--muted);white-space:nowrap"><?= h(date('d M Y', strtotime($req['created_at']))) ?></td>
+              <td><span class="badge <?= $stc ?>"><?= h($req['status']) ?></span>
+                <?php if (!empty($req['admin_note'])): ?>
+                  <div style="font-size:.72rem;color:var(--muted);margin-top:.25rem;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="<?= h($req['admin_note']) ?>"><?= h($req['admin_note']) ?></div>
+                <?php endif; ?>
+              </td>
+              <td>
+                <?php if ($req['status'] === 'open'): ?>
+                <div class="action-cell">
+                  <form method="POST" onsubmit="return confirm('Approve this mentor change?')">
+                    <input type="hidden" name="action"     value="approve_mentor_change">
+                    <input type="hidden" name="csrf"       value="<?= h($csrf) ?>">
+                    <input type="hidden" name="request_id" value="<?= (int)$req['id'] ?>">
+                    <button class="btn-approve" type="submit">Approve</button>
+                  </form>
+                  <button class="btn-del enp-deny-btn"
+                          data-id="<?= (int)$req['id'] ?>"
+                          data-name="<?= h($req['student_name'] ?? '') ?>">Deny</button>
+                </div>
+                <?php else: ?>
+                  <span style="color:var(--muted);font-size:.8rem">—</span>
+                <?php endif; ?>
+              </td>
+            </tr>
+          <?php endforeach; else: ?>
+            <tr class="empty-row"><td colspan="7">No mentor change requests yet.</td></tr>
+          <?php endif; ?>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Deny modal -->
+    <div id="enp-deny-modal" class="enp-modal-overlay">
+      <div class="enp-modal">
+        <h3 id="enp-deny-title"></h3>
+        <p style="color:var(--muted);font-size:.85rem">Optional note to send to the student:</p>
+        <div class="form-group">
+          <label>Note (optional)</label>
+          <textarea id="enp-deny-note" rows="4" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:.65rem .9rem;font-family:inherit;resize:vertical" placeholder="Explain the decision…"></textarea>
+        </div>
+        <div class="enp-modal-actions">
+          <button class="btn-del" onclick="document.getElementById('enp-deny-modal').classList.remove('open')">Cancel</button>
+          <button class="btn-add" id="enp-deny-confirm">Deny &amp; Notify</button>
+        </div>
+      </div>
+    </div>
+    <form id="enp-deny-form" method="POST" style="display:none">
+      <input type="hidden" name="csrf"         value="<?= h($csrf) ?>">
+      <input type="hidden" name="action"       value="deny_mentor_change">
+      <input type="hidden" id="enp-dfid"       name="request_id">
+      <input type="hidden" id="enp-dfnote"     name="admin_note">
+    </form>
 
   <?php elseif ($section === 'sessions'): ?>
   <!-- ── SESSIONS ───────────────────────────────────────────── -->
@@ -1274,6 +1505,50 @@ HTML;
         document.getElementById('enp-action-form').submit();
       };
     });
+  });
+  modal.addEventListener('click', function (e) { if (e.target === this) this.classList.remove('open'); });
+})();
+
+// ── Set student sessions modal ───────────────────────────────────────────────
+(function () {
+  var modal  = document.getElementById('enp-sessions-modal');
+  var btnCfm = document.getElementById('enp-sessions-confirm');
+  if (!modal || !btnCfm) return;
+  var currentId = null;
+  document.querySelectorAll('.enp-set-sessions-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      currentId = btn.dataset.id;
+      document.getElementById('enp-sessions-modal-name').textContent = btn.dataset.name;
+      document.getElementById('enp-sessions-input').value = btn.dataset.current || 4;
+      modal.classList.add('open');
+    });
+  });
+  btnCfm.addEventListener('click', function () {
+    var val = parseInt(document.getElementById('enp-sessions-input').value, 10);
+    if (!currentId || isNaN(val) || val < 1 || val > 100) { alert('Enter a number between 1 and 100.'); return; }
+    document.getElementById('enp-sform-id').value       = currentId;
+    document.getElementById('enp-sform-sessions').value = val;
+    document.getElementById('enp-sessions-form').submit();
+  });
+  modal.addEventListener('click', function (e) { if (e.target === this) this.classList.remove('open'); });
+})();
+
+// ── Deny mentor change modal ─────────────────────────────────────────────────
+(function () {
+  var modal  = document.getElementById('enp-deny-modal');
+  var btnCfm = document.getElementById('enp-deny-confirm');
+  if (!modal || !btnCfm) return;
+  document.querySelectorAll('.enp-deny-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      document.getElementById('enp-deny-title').textContent = 'Deny — ' + btn.dataset.name;
+      document.getElementById('enp-deny-note').value = '';
+      document.getElementById('enp-dfid').value = btn.dataset.id;
+      modal.classList.add('open');
+    });
+  });
+  btnCfm.addEventListener('click', function () {
+    document.getElementById('enp-dfnote').value = document.getElementById('enp-deny-note').value.trim();
+    document.getElementById('enp-deny-form').submit();
   });
   modal.addEventListener('click', function (e) { if (e.target === this) this.classList.remove('open'); });
 })();
