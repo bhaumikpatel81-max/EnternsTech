@@ -4,6 +4,8 @@
  * Accessible only at /admin-portal/ — never linked from the main site.
  */
 
+ob_start(); // buffer output so header() calls work after any early output
+
 session_start();
 header('X-Robots-Tag: noindex, nofollow');
 header('X-Frame-Options: DENY');
@@ -15,6 +17,14 @@ if (!file_exists(__DIR__ . '/config.php')) {
     die(render_setup_page());
 }
 require_once __DIR__ . '/config.php';
+
+// ── WordPress bootstrap ───────────────────────────────────────────────────────
+// Loads wp_create_user(), get_password_reset_key(), enp_send_mail(), etc.
+$_enp_wp = dirname(__DIR__) . '/wp-load.php';
+if (!defined('ABSPATH') && file_exists($_enp_wp)) {
+    require_once $_enp_wp;
+}
+unset($_enp_wp);
 
 // ── DB connection (lazy) ──────────────────────────────────────────────────────
 $pdo = null;
@@ -93,6 +103,12 @@ if (!empty($_SESSION['et_auth']) && (time() - ($_SESSION['et_time'] ?? 0)) > 288
 
 $logged_in = !empty($_SESSION['et_auth']);
 
+// CSRF token for mentor admin actions — one per login session
+if ($logged_in && empty($_SESSION['enp_csrf'])) {
+    $_SESSION['enp_csrf'] = bin2hex(random_bytes(16));
+}
+$csrf = $logged_in ? ($_SESSION['enp_csrf'] ?? '') : '';
+
 // Add manual revenue
 if ($logged_in && $action === 'add_revenue') {
     $db   = get_db();
@@ -123,6 +139,146 @@ if ($logged_in && $action === 'delete_transaction') {
     $stmt->execute([intval($_POST['tx_id'] ?? 0)]);
     header('Location: ' . strtok($_SERVER['REQUEST_URI'], '?') . '?section=transactions');
     exit;
+}
+
+// ── Mentor admin actions (WordPress required) ─────────────────────────────────
+
+// Approve mentor: create WP user, link user_id, send set-password email
+if ($logged_in && $action === 'approve_mentor') {
+    if (!isset($_SESSION['enp_csrf']) || !hash_equals($_SESSION['enp_csrf'], $_POST['csrf'] ?? '')) {
+        http_response_code(403); die('CSRF mismatch.');
+    }
+    if (!function_exists('wp_create_user')) {
+        die('WordPress not loaded. Ensure /wp-load.php exists at ' . htmlspecialchars(dirname(__DIR__), ENT_QUOTES));
+    }
+    $mid = intval($_POST['mentor_id'] ?? 0);
+    $db  = get_db(); $p = DB_PREFIX;
+    $st  = $db->prepare("SELECT * FROM `{$p}enp_mentors` WHERE id = ? LIMIT 1");
+    $st->execute([$mid]);
+    $mentor = $st->fetch();
+    if (!$mentor) { header('Location: ?section=applications&err=' . urlencode('Mentor not found.')); exit; }
+    if ($mentor['status'] === 'approved') { header('Location: ?section=applications&err=' . urlencode('Already approved.')); exit; }
+
+    // Find or create WP user
+    $existing = get_user_by('email', $mentor['email']);
+    if ($existing) {
+        $wp_uid  = $existing->ID;
+        $wp_user = $existing;
+    } else {
+        $parts   = explode(' ', strtolower(trim($mentor['full_name'])), 2);
+        $base    = sanitize_user(implode('.', array_map('trim', $parts)), true);
+        if (!$base) $base = sanitize_user(strstr($mentor['email'], '@', true), true);
+        $login = $base; $n = 1;
+        while (username_exists($login)) { $login = $base . $n++; }
+        $wp_uid = wp_create_user($login, wp_generate_password(24, true, true), $mentor['email']);
+        if (is_wp_error($wp_uid)) {
+            header('Location: ?section=applications&err=' . urlencode($wp_uid->get_error_message())); exit;
+        }
+        $wp_user = new WP_User($wp_uid);
+        wp_update_user([
+            'ID'           => $wp_uid,
+            'display_name' => $mentor['full_name'],
+            'first_name'   => ucfirst($parts[0]),
+            'last_name'    => isset($parts[1]) ? ucfirst(trim($parts[1])) : '',
+        ]);
+    }
+    $wp_user->set_role('et_mentor');
+
+    // Build set-password link using WP native reset-key flow
+    $key       = get_password_reset_key($wp_user);
+    $reset_url = !is_wp_error($key)
+        ? add_query_arg(['action' => 'rp', 'key' => $key, 'login' => rawurlencode($wp_user->user_login)], wp_login_url())
+        : '';
+
+    // Link DB row to WP user
+    $db->prepare("UPDATE `{$p}enp_mentors` SET status='approved', user_id=? WHERE id=?")->execute([$wp_uid, $mid]);
+
+    // Send approval email with set-password link
+    if (function_exists('enp_send_mail')) {
+        $fname = esc_html(explode(' ', $mentor['full_name'])[0]);
+        $body  = "<h2 style='color:#22D3EE;margin:0 0 16px'>Welcome, {$fname}!</h2>";
+        $body .= "<p>Your mentor application has been <strong style='color:#4ade80'>approved</strong>.</p>";
+        if ($reset_url) {
+            $body .= "<p style='margin:24px 0'><a href='" . esc_url($reset_url) . "' style='background:#22D3EE;color:#05080F;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:700;display:inline-block'>Set Your Password</a></p>";
+            $body .= "<p style='color:#94a3b8;font-size:13px'>This link expires in 24 hours. After that, use <em>Forgot Password</em> on the login page.</p>";
+        }
+        $body .= "<p style='color:#94a3b8;font-size:13px'>Mentor portal: <a href='" . esc_url(home_url('/mentor/')) . "' style='color:#22D3EE'>" . esc_html(home_url('/mentor/')) . "</a></p>";
+        enp_send_mail($mentor['email'], 'Welcome to Enterns Tech — Set your password', $body, true);
+    }
+    header('Location: ?section=applications&approved=1'); exit;
+}
+
+// Reject mentor
+if ($logged_in && $action === 'reject_mentor') {
+    if (!isset($_SESSION['enp_csrf']) || !hash_equals($_SESSION['enp_csrf'], $_POST['csrf'] ?? '')) {
+        http_response_code(403); die('CSRF mismatch.');
+    }
+    $mid        = intval($_POST['mentor_id'] ?? 0);
+    $admin_note = substr(strip_tags(wp_unslash($_POST['admin_note'] ?? '')), 0, 1000);
+    $db = get_db(); $p = DB_PREFIX;
+    $db->prepare("UPDATE `{$p}enp_mentors` SET status='rejected', admin_note=? WHERE id=? AND status != 'approved'")->execute([$admin_note, $mid]);
+    $st = $db->prepare("SELECT full_name, email FROM `{$p}enp_mentors` WHERE id=?");
+    $st->execute([$mid]);
+    $mentor = $st->fetch();
+    if ($mentor && function_exists('enp_send_mail')) {
+        $name  = esc_html($mentor['full_name']);
+        $body  = "<h2 style='color:#22D3EE;margin:0 0 16px'>Application Update</h2>";
+        $body .= "<p>Thank you for your interest in mentoring at Enterns Tech, {$name}.</p>";
+        $body .= "<p>After reviewing your application, we are unable to move forward at this time.</p>";
+        if ($admin_note) {
+            $body .= "<p><strong>Feedback from our team:</strong><br>" . nl2br(esc_html($admin_note)) . "</p>";
+        }
+        $body .= "<p>You are welcome to apply again in the future. Thank you for your time.</p>";
+        enp_send_mail($mentor['email'], 'Your Enterns Tech mentor application', $body, true);
+    }
+    header('Location: ?section=applications&rejected=1'); exit;
+}
+
+// Request more info
+if ($logged_in && $action === 'request_info') {
+    if (!isset($_SESSION['enp_csrf']) || !hash_equals($_SESSION['enp_csrf'], $_POST['csrf'] ?? '')) {
+        http_response_code(403); die('CSRF mismatch.');
+    }
+    $mid        = intval($_POST['mentor_id'] ?? 0);
+    $admin_note = substr(strip_tags(wp_unslash($_POST['admin_note'] ?? '')), 0, 1000);
+    $db = get_db(); $p = DB_PREFIX;
+    $db->prepare("UPDATE `{$p}enp_mentors` SET status='info_requested', admin_note=? WHERE id=?")->execute([$admin_note, $mid]);
+    $st = $db->prepare("SELECT full_name, email FROM `{$p}enp_mentors` WHERE id=?");
+    $st->execute([$mid]);
+    $mentor = $st->fetch();
+    if ($mentor && function_exists('enp_send_mail')) {
+        $name  = esc_html($mentor['full_name']);
+        $body  = "<h2 style='color:#22D3EE;margin:0 0 16px'>Additional Information Needed</h2>";
+        $body .= "<p>Thank you for applying to Enterns Tech, {$name}.</p>";
+        $body .= "<p>Before we can proceed, we need the following:</p>";
+        $body .= "<blockquote style='border-left:3px solid #22D3EE;padding-left:1rem;margin:1rem 0;color:#94a3b8'>" . nl2br(esc_html($admin_note)) . "</blockquote>";
+        $body .= "<p>Please reply to this email with the requested details.</p>";
+        enp_send_mail($mentor['email'], 'Additional information needed for your Enterns Tech application', $body, true);
+    }
+    header('Location: ?section=applications&info_sent=1'); exit;
+}
+
+// Edit mentor: rate per session, available slots, custom fields JSON
+if ($logged_in && $action === 'edit_mentor') {
+    if (!isset($_SESSION['enp_csrf']) || !hash_equals($_SESSION['enp_csrf'], $_POST['csrf'] ?? '')) {
+        http_response_code(403); die('CSRF mismatch.');
+    }
+    $mid       = intval($_POST['mentor_id'] ?? 0);
+    $rate      = max(0.0, (float) ($_POST['rate_per_session'] ?? 0));
+    $slots     = max(1, min(40, intval($_POST['available_slots'] ?? 1)));
+    $raw_extra = function_exists('wp_unslash') ? wp_unslash($_POST['extra_fields'] ?? '{}') : ($_POST['extra_fields'] ?? '{}');
+    $decoded   = json_decode($raw_extra, true);
+    if (!is_array($decoded)) $decoded = [];
+    $clean = [];
+    foreach ($decoded as $k => $v) {
+        $ck = substr(trim(strip_tags((string)$k)), 0, 100);
+        $cv = substr(trim(strip_tags((string)$v)), 0, 500);
+        if ($ck !== '') $clean[$ck] = $cv;
+    }
+    $db = get_db(); $p = DB_PREFIX;
+    $db->prepare("UPDATE `{$p}enp_mentors` SET rate_per_session=?, available_slots=?, extra_fields=? WHERE id=? AND status='approved'")
+       ->execute([$rate, $slots, json_encode($clean), $mid]);
+    header('Location: ?section=mentors&updated=1'); exit;
 }
 
 // ── Dashboard data ────────────────────────────────────────────────────────────
@@ -364,6 +520,29 @@ HTML;
     .btn-add { background: var(--cyan); color: #0a0e1a; font-weight: 700; font-size: .9rem; padding: .65rem 1.4rem; border: none; border-radius: 8px; cursor: pointer; transition: opacity .2s; margin-top: 1.5rem; }
     .btn-add:hover { opacity: .85; }
     .success-banner { background: rgba(74,222,128,.08); border: 1px solid rgba(74,222,128,.25); border-radius: 8px; color: var(--green); padding: .75rem 1rem; margin-bottom: 1.25rem; font-size: .9rem; }
+
+    /* ── ACTION BUTTONS ─────────────────────────────────────────────────────── */
+    .action-cell { display:flex;gap:.35rem;flex-wrap:wrap;align-items:center; }
+    .btn-approve { background:rgba(74,222,128,.1);border:1px solid rgba(74,222,128,.3);color:var(--green);font-size:.75rem;padding:.3rem .7rem;border-radius:6px;cursor:pointer;transition:background .2s;white-space:nowrap; }
+    .btn-approve:hover { background:rgba(74,222,128,.2); }
+    .btn-warn { background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.3);color:var(--gold);font-size:.75rem;padding:.3rem .7rem;border-radius:6px;cursor:pointer;transition:background .2s;white-space:nowrap; }
+    .btn-warn:hover { background:rgba(251,191,36,.2); }
+    .btn-edit { background:rgba(34,211,238,.08);border:1px solid rgba(34,211,238,.25);color:var(--cyan);font-size:.75rem;padding:.3rem .7rem;border-radius:6px;cursor:pointer;transition:background .2s;white-space:nowrap; }
+    .btn-edit:hover { background:rgba(34,211,238,.15); }
+    .badge-red   { background:rgba(248,113,113,.12);color:var(--red);border:1px solid rgba(248,113,113,.3); }
+    .badge-muted { background:rgba(148,163,184,.1);color:var(--muted);border:1px solid rgba(148,163,184,.2); }
+
+    /* ── MENTOR PHOTO ────────────────────────────────────────────────────────── */
+    .mentor-photo { width:34px;height:34px;border-radius:50%;object-fit:cover;border:1px solid var(--border);flex-shrink:0; }
+    .mentor-photo-placeholder { width:34px;height:34px;border-radius:50%;background:rgba(34,211,238,.1);border:1px solid rgba(34,211,238,.2);display:inline-flex;align-items:center;justify-content:center;font-size:.75rem;color:var(--cyan);font-weight:700;flex-shrink:0; }
+
+    /* ── MODAL ───────────────────────────────────────────────────────────────── */
+    .enp-modal-overlay { display:none;position:fixed;inset:0;z-index:999;background:rgba(0,0,0,.65);align-items:center;justify-content:center; }
+    .enp-modal-overlay.open { display:flex; }
+    .enp-modal { background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:1.75rem 1.5rem;max-width:480px;width:90%;box-shadow:0 0 60px rgba(0,0,0,.5); }
+    .enp-modal h3 { margin:0 0 .35rem;color:var(--text); }
+    .enp-modal p  { color:var(--muted);font-size:.85rem;margin:0 0 .75rem; }
+    .enp-modal-actions { display:flex;gap:.75rem;margin-top:1.25rem;justify-content:flex-end; }
 
     @media(max-width:600px) {
       .main { padding: 1rem; }
@@ -645,51 +824,110 @@ HTML;
   <?php elseif ($section === 'applications'): ?>
   <!-- ── MENTOR APPLICATIONS ────────────────────────────────── -->
 
+    <?php if (isset($_GET['approved'])): ?>
+      <div class="success-banner">Mentor approved — set-password email sent.</div>
+    <?php elseif (isset($_GET['rejected'])): ?>
+      <div class="success-banner" style="background:rgba(248,113,113,.08);border-color:rgba(248,113,113,.25);color:var(--red)">Application rejected — applicant notified.</div>
+    <?php elseif (isset($_GET['info_sent'])): ?>
+      <div class="success-banner" style="background:rgba(251,191,36,.08);border-color:rgba(251,191,36,.25);color:var(--gold)">Information request sent to applicant.</div>
+    <?php elseif (isset($_GET['err'])): ?>
+      <div class="success-banner" style="background:rgba(248,113,113,.08);border-color:rgba(248,113,113,.25);color:var(--red)">Error: <?= h($_GET['err']) ?></div>
+    <?php endif; ?>
+
     <div class="section-title">
-      Mentor Applications
-      <span><?= count($applications) ?> total</span>
+      Mentor Applications <span><?= count($applications) ?> total</span>
       <?php if ($portal['mentors_pending'] > 0): ?>
         <span style="background:rgba(251,191,36,.15);color:var(--gold);border-color:rgba(251,191,36,.3);"><?= (int)$portal['mentors_pending'] ?> pending</span>
       <?php endif; ?>
     </div>
-    <p style="color:var(--muted);font-size:.85rem;margin-bottom:1.25rem;">
-      Full approve / reject / request-info workflow is available in Phase 3.
-    </p>
+
     <div class="card">
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Name</th><th>Email</th><th>Tech Stack</th><th>LinkedIn</th><th>Status</th><th>Applied</th></tr></thead>
+          <thead><tr><th>Photo</th><th>Name</th><th>Email</th><th>Phone</th><th>Tech Stack</th><th>Slots</th><th>Status</th><th>Applied</th><th>Actions</th></tr></thead>
           <tbody>
-          <?php if ($applications): foreach ($applications as $a): ?>
+          <?php if ($applications): foreach ($applications as $a):
+            $ap   = explode(' ', $a['full_name'], 2);
+            $init = strtoupper(substr($ap[0], 0, 1) . (isset($ap[1]) ? substr($ap[1], 0, 1) : ''));
+            $stc  = ['pending'=>'badge-gold','approved'=>'badge-green','rejected'=>'badge-red','info_requested'=>'badge-muted'][$a['status']] ?? 'badge-muted';
+          ?>
             <tr>
+              <td>
+                <?php if (!empty($a['photo_url'])): ?>
+                  <img src="<?= h($a['photo_url']) ?>" alt="" class="mentor-photo">
+                <?php else: ?>
+                  <div class="mentor-photo-placeholder"><?= h($init) ?></div>
+                <?php endif; ?>
+              </td>
               <td style="font-weight:600"><?= h($a['full_name']) ?></td>
               <td style="font-size:.82rem;color:var(--muted)"><?= h($a['email']) ?></td>
-              <td style="font-size:.78rem;max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><?= h($a['tech_stack'] ?? '') ?></td>
-              <td><?php if ($a['linkedin']): ?><a href="<?= h($a['linkedin']) ?>" target="_blank" rel="noopener" style="color:var(--cyan);font-size:.8rem;">View ↗</a><?php else: echo '<span style="color:var(--muted)">—</span>'; endif; ?></td>
+              <td style="font-size:.82rem;color:var(--muted)"><?= h($a['phone']) ?></td>
+              <td style="font-size:.78rem;max-width:150px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="<?= h($a['tech_stack'] ?? '') ?>"><?= h($a['tech_stack'] ?? '—') ?></td>
+              <td style="text-align:center"><?= (int)$a['available_slots'] ?></td>
               <td>
-                <?php
-                $sc = ['pending'=>'badge-gold','approved'=>'badge-green','rejected'=>''];
-                $cls = $sc[$a['status']] ?? '';
-                ?>
-                <span class="badge <?= $cls ?>"><?= h($a['status']) ?></span>
+                <span class="badge <?= $stc ?>"><?= h(str_replace('_', ' ', $a['status'])) ?></span>
+                <?php if (!empty($a['admin_note'])): ?>
+                  <div style="font-size:.72rem;color:var(--muted);margin-top:.25rem;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="<?= h($a['admin_note']) ?>"><?= h($a['admin_note']) ?></div>
+                <?php endif; ?>
               </td>
-              <td style="font-size:.78rem;color:var(--muted)"><?= h(date('d M Y', strtotime($a['created_at']))) ?></td>
+              <td style="font-size:.78rem;color:var(--muted);white-space:nowrap"><?= h(date('d M Y', strtotime($a['created_at']))) ?></td>
+              <td>
+                <?php if (in_array($a['status'], ['pending', 'info_requested'], true)): ?>
+                <div class="action-cell">
+                  <form method="POST" onsubmit="return confirm('Approve <?= h(str_replace("'", "\\'", $a['full_name'])) ?> and send a set-password email?')">
+                    <input type="hidden" name="action"    value="approve_mentor">
+                    <input type="hidden" name="mentor_id" value="<?= (int)$a['id'] ?>">
+                    <input type="hidden" name="csrf"      value="<?= h($csrf) ?>">
+                    <button class="btn-approve" type="submit">Approve</button>
+                  </form>
+                  <button class="btn-del"  data-action="reject_mentor" data-id="<?= (int)$a['id'] ?>" data-name="<?= h($a['full_name']) ?>">Reject</button>
+                  <button class="btn-warn" data-action="request_info"  data-id="<?= (int)$a['id'] ?>" data-name="<?= h($a['full_name']) ?>">Ask Info</button>
+                </div>
+                <?php elseif ($a['status'] === 'approved'): ?>
+                  <span style="color:var(--green);font-size:.8rem">&#10003; Approved</span>
+                <?php else: ?>
+                  <span style="color:var(--muted);font-size:.8rem">—</span>
+                <?php endif; ?>
+              </td>
             </tr>
           <?php endforeach; else: ?>
-            <tr class="empty-row"><td colspan="6">No mentor applications yet. Share the partner form link to start receiving applications.</td></tr>
+            <tr class="empty-row"><td colspan="9">No mentor applications yet. Share the <a href="<?= function_exists('home_url') ? h(home_url('/partner-with-us/')) : '/partner-with-us/' ?>" target="_blank" style="color:var(--cyan)">partner form ↗</a> to start receiving applications.</td></tr>
           <?php endif; ?>
           </tbody>
         </table>
       </div>
     </div>
 
+    <!-- Reject / Ask Info modal -->
+    <div id="enp-action-modal" class="enp-modal-overlay">
+      <div class="enp-modal">
+        <h3 id="enp-modal-title"></h3>
+        <p  id="enp-modal-desc"></p>
+        <div class="form-group">
+          <label>Note</label>
+          <textarea id="enp-modal-note" rows="4" placeholder="Enter your message to the applicant…"></textarea>
+        </div>
+        <div class="enp-modal-actions">
+          <button class="btn-del" onclick="document.getElementById('enp-action-modal').classList.remove('open')">Cancel</button>
+          <button class="btn-add" id="enp-modal-confirm">Confirm &amp; Send</button>
+        </div>
+      </div>
+    </div>
+    <form id="enp-action-form" method="POST" style="display:none">
+      <input type="hidden" name="csrf"       value="<?= h($csrf) ?>">
+      <input type="hidden" id="enp-fa"  name="action">
+      <input type="hidden" id="enp-fid" name="mentor_id">
+      <input type="hidden" id="enp-fn"  name="admin_note">
+    </form>
+
   <?php elseif ($section === 'mentors'): ?>
   <!-- ── MENTORS ────────────────────────────────────────────── -->
 
-    <div class="section-title">Mentors <span><?= (int)$portal['mentors_total'] ?> total</span></div>
-    <p style="color:var(--muted);font-size:.85rem;margin-bottom:1.25rem;">
-      Mentor profile editing, custom fields, rate overrides, and assignment controls come in Phase 3.
-    </p>
+    <?php if (isset($_GET['updated'])): ?>
+      <div class="success-banner">Mentor profile updated.</div>
+    <?php endif; ?>
+
+    <div class="section-title">Approved Mentors <span><?= (int)$portal['mentors_total'] ?> total</span></div>
     <div class="card">
       <div class="table-wrap">
         <?php
@@ -697,24 +935,76 @@ HTML;
         try { $all_mentors = $db->query("SELECT * FROM `{$p}enp_mentors` WHERE status='approved' ORDER BY full_name")->fetchAll(); } catch (PDOException $e) {}
         ?>
         <table>
-          <thead><tr><th>Name</th><th>Email</th><th>Tech Stack</th><th>Slots</th><th>Rate / Session</th><th>Status</th></tr></thead>
+          <thead><tr><th>Photo</th><th>Name</th><th>Email</th><th>Tech Stack</th><th>Slots/wk</th><th>Rate</th><th>Custom Fields</th><th></th></tr></thead>
           <tbody>
-          <?php if ($all_mentors): foreach ($all_mentors as $m): ?>
+          <?php if ($all_mentors): foreach ($all_mentors as $m):
+            $mp     = explode(' ', $m['full_name'], 2);
+            $minit  = strtoupper(substr($mp[0], 0, 1) . (isset($mp[1]) ? substr($mp[1], 0, 1) : ''));
+            $mextra = $m['extra_fields'] ?: '{}';
+            $marr   = json_decode($mextra, true) ?: [];
+          ?>
             <tr>
+              <td>
+                <?php if (!empty($m['photo_url'])): ?>
+                  <img src="<?= h($m['photo_url']) ?>" alt="" class="mentor-photo">
+                <?php else: ?>
+                  <div class="mentor-photo-placeholder"><?= h($minit) ?></div>
+                <?php endif; ?>
+              </td>
               <td style="font-weight:600"><?= h($m['full_name']) ?></td>
               <td style="font-size:.82rem;color:var(--muted)"><?= h($m['email']) ?></td>
-              <td style="font-size:.78rem;max-width:200px"><?= h($m['tech_stack'] ?? '') ?></td>
-              <td><?= (int)$m['available_slots'] ?></td>
+              <td style="font-size:.78rem;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="<?= h($m['tech_stack'] ?? '') ?>"><?= h($m['tech_stack'] ?? '—') ?></td>
+              <td style="text-align:center"><?= (int)$m['available_slots'] ?></td>
               <td style="color:var(--green)">&#8377;<?= number_format((float)$m['rate_per_session'], 0) ?></td>
-              <td><span class="badge badge-green"><?= h($m['status']) ?></span></td>
+              <td style="font-size:.78rem;color:var(--muted)">
+                <?php if ($marr): foreach ($marr as $ek => $ev): ?>
+                  <div><strong><?= h((string)$ek) ?>:</strong> <?= h((string)$ev) ?></div>
+                <?php endforeach; else: ?><span style="color:var(--muted)">—</span><?php endif; ?>
+              </td>
+              <td>
+                <button class="btn-edit"
+                  data-id="<?= (int)$m['id'] ?>"
+                  data-name="<?= h($m['full_name']) ?>"
+                  data-rate="<?= (float)$m['rate_per_session'] ?>"
+                  data-slots="<?= (int)$m['available_slots'] ?>"
+                  data-extra="<?= h($mextra) ?>">Edit</button>
+              </td>
             </tr>
           <?php endforeach; else: ?>
-            <tr class="empty-row"><td colspan="6">No approved mentors yet.</td></tr>
+            <tr class="empty-row"><td colspan="8">No approved mentors yet. Approve applications in the Applications tab.</td></tr>
           <?php endif; ?>
           </tbody>
         </table>
       </div>
     </div>
+
+    <!-- Edit mentor modal -->
+    <div id="enp-edit-modal" class="enp-modal-overlay">
+      <div class="enp-modal" style="max-width:520px">
+        <h3 style="margin:0 0 .25rem">Edit Mentor</h3>
+        <p id="enp-edit-mentor-name" style="color:var(--cyan);margin:0 0 1.25rem;font-size:.9rem"></p>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin-bottom:.75rem">
+          <div class="form-group"><label>Rate per Session (&#8377;)</label><input type="number" id="enp-edit-rate"  min="0" step="1" style="width:100%"></div>
+          <div class="form-group"><label>Slots / Week</label>              <input type="number" id="enp-edit-slots" min="1" max="40" style="width:100%"></div>
+        </div>
+        <div class="form-group">
+          <label>Custom Fields <small style="color:var(--muted);text-transform:none;letter-spacing:0;font-size:.72rem">(one &ldquo;Key: Value&rdquo; per line)</small></label>
+          <textarea id="enp-edit-extra" rows="5" style="width:100%" placeholder="LinkedIn: https://linkedin.com/in/...&#10;Specialisation: Full Stack&#10;Experience: 5 years"></textarea>
+        </div>
+        <div class="enp-modal-actions">
+          <button class="btn-del" onclick="document.getElementById('enp-edit-modal').classList.remove('open')">Cancel</button>
+          <button class="btn-add" id="enp-edit-confirm">Save Changes</button>
+        </div>
+      </div>
+    </div>
+    <form id="enp-edit-form" method="POST" style="display:none">
+      <input type="hidden" name="csrf"             value="<?= h($csrf) ?>">
+      <input type="hidden" name="action"           value="edit_mentor">
+      <input type="hidden" id="enp-eform-id"       name="mentor_id">
+      <input type="hidden" id="enp-eform-rate"     name="rate_per_session">
+      <input type="hidden" id="enp-eform-slots"    name="available_slots">
+      <input type="hidden" id="enp-eform-extra"    name="extra_fields">
+    </form>
 
   <?php elseif ($section === 'students'): ?>
   <!-- ── STUDENTS ───────────────────────────────────────────── -->
@@ -856,6 +1146,85 @@ HTML;
       }
     }
   });
+})();
+</script>
+
+<script>
+// ── Reject / Request-info action modal ───────────────────────────────────────
+(function () {
+  var modal  = document.getElementById('enp-action-modal');
+  var btnCfm = document.getElementById('enp-modal-confirm');
+  if (!modal || !btnCfm) return;
+
+  document.querySelectorAll('[data-action]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var act  = btn.dataset.action;
+      var id   = btn.dataset.id;
+      var name = btn.dataset.name;
+      var title = act === 'reject_mentor' ? 'Reject — ' + name : 'Request Info — ' + name;
+      var desc  = act === 'reject_mentor'
+        ? 'Optional feedback for the applicant (included in rejection email):'
+        : 'What additional information is needed? (sent to applicant):';
+      document.getElementById('enp-modal-title').textContent = title;
+      document.getElementById('enp-modal-desc').textContent  = desc;
+      document.getElementById('enp-modal-note').value = '';
+      modal.classList.add('open');
+      btnCfm.onclick = function () {
+        var note = document.getElementById('enp-modal-note').value.trim();
+        if (act === 'request_info' && !note) { alert('Please enter the information needed from the applicant.'); return; }
+        document.getElementById('enp-fa').value  = act;
+        document.getElementById('enp-fid').value = id;
+        document.getElementById('enp-fn').value  = note;
+        document.getElementById('enp-action-form').submit();
+      };
+    });
+  });
+  modal.addEventListener('click', function (e) { if (e.target === this) this.classList.remove('open'); });
+})();
+
+// ── Edit mentor modal ────────────────────────────────────────────────────────
+(function () {
+  var modal  = document.getElementById('enp-edit-modal');
+  var btnCfm = document.getElementById('enp-edit-confirm');
+  if (!modal || !btnCfm) return;
+
+  var editId = null;
+
+  document.querySelectorAll('.btn-edit').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      editId = btn.dataset.id;
+      document.getElementById('enp-edit-mentor-name').textContent = btn.dataset.name;
+      document.getElementById('enp-edit-rate').value  = btn.dataset.rate;
+      document.getElementById('enp-edit-slots').value = btn.dataset.slots;
+      var lines = '';
+      try {
+        var obj = JSON.parse(btn.dataset.extra || '{}');
+        lines = Object.entries(obj).map(function (e) { return e[0] + ': ' + e[1]; }).join('\n');
+      } catch (ex) {}
+      document.getElementById('enp-edit-extra').value = lines;
+      modal.classList.add('open');
+    });
+  });
+
+  btnCfm.addEventListener('click', function () {
+    var lines = document.getElementById('enp-edit-extra').value.split('\n');
+    var obj   = {};
+    lines.forEach(function (line) {
+      var idx = line.indexOf(':');
+      if (idx > 0) {
+        var k = line.substring(0, idx).trim();
+        var v = line.substring(idx + 1).trim();
+        if (k) obj[k] = v;
+      }
+    });
+    document.getElementById('enp-eform-id').value    = editId;
+    document.getElementById('enp-eform-rate').value  = document.getElementById('enp-edit-rate').value;
+    document.getElementById('enp-eform-slots').value = document.getElementById('enp-edit-slots').value;
+    document.getElementById('enp-eform-extra').value = JSON.stringify(obj);
+    document.getElementById('enp-edit-form').submit();
+  });
+
+  modal.addEventListener('click', function (e) { if (e.target === this) this.classList.remove('open'); });
 })();
 </script>
 

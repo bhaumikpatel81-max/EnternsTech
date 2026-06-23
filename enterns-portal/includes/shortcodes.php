@@ -56,9 +56,16 @@ function enp_shortcode_admin( $atts ) {
 	if ( ! current_user_can( 'manage_options' ) ) {
 		return enp_access_denied();
 	}
-	ob_start();
-	include ENP_DIR . 'templates/admin-dashboard.php';
-	return ob_get_clean();
+	$portal_url = esc_url( home_url( '/admin-portal/' ) );
+	return '<div class="enp-wrap">'
+		. '<div class="enp-notice enp-notice--info" style="margin-bottom:1.5rem">'
+		. '<strong>' . esc_html__( 'Admin Portal', 'enterns-portal' ) . '</strong> &mdash; '
+		. esc_html__( 'Use the standalone admin interface for all management tasks.', 'enterns-portal' )
+		. '</div>'
+		. '<p><a href="' . $portal_url . '" class="enp-btn enp-btn--primary">'
+		. esc_html__( 'Open Admin Portal', 'enterns-portal' )
+		. ' &rarr;</a></p>'
+		. '</div>';
 }
 
 // ── [enp_mentor] ──────────────────────────────────────────────────────────────
