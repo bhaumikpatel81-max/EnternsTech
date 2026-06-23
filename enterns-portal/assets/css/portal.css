@@ -1,0 +1,268 @@
+/*
+ * Enterns Portal — front-end styles
+ * Matches the existing dark theme (bg #05080F, cyan #22D3EE, surf #0C1426).
+ */
+
+/* ── Reset / Variables ────────────────────────────────────────────────────── */
+:root {
+	--enp-cyan:   #22D3EE;
+	--enp-blue:   #3BA4FF;
+	--enp-bg:     #05080F;
+	--enp-surf:   #0C1426;
+	--enp-surf2:  #111827;
+	--enp-text:   #ECF2FF;
+	--enp-muted:  #6B7280;
+	--enp-bdr:    rgba(34, 211, 238, 0.12);
+	--enp-bdr2:   rgba(34, 211, 238, 0.22);
+	--enp-danger: #EF4444;
+	--enp-warn:   #F59E0B;
+	--enp-green:  #10B981;
+	--enp-radius: 12px;
+	--enp-trans:  0.2s ease;
+}
+
+/* ── Wrapper ──────────────────────────────────────────────────────────────── */
+.enp-wrap {
+	max-width: 1200px;
+	margin: 0 auto;
+	padding: 2rem 1.25rem 4rem;
+	color: var(--enp-text);
+	font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+}
+
+/* ── Portal Header ────────────────────────────────────────────────────────── */
+.enp-portal-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	flex-wrap: wrap;
+	gap: 1rem;
+	margin-bottom: 2rem;
+	padding-bottom: 1.25rem;
+	border-bottom: 1px solid var(--enp-bdr);
+}
+.enp-portal-header__title {
+	display: flex;
+	align-items: center;
+	gap: 0.75rem;
+	flex-wrap: wrap;
+}
+.enp-portal-header h1 {
+	margin: 0;
+	font-size: 1.5rem;
+	font-weight: 700;
+	color: var(--enp-text);
+}
+
+/* ── Badges ───────────────────────────────────────────────────────────────── */
+.enp-badge {
+	display: inline-block;
+	padding: 0.2em 0.7em;
+	border-radius: 999px;
+	font-size: 0.7rem;
+	font-weight: 700;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+}
+.enp-badge--admin   { background: rgba(34,211,238,0.15); color: var(--enp-cyan); border: 1px solid var(--enp-bdr2); }
+.enp-badge--mentor  { background: rgba(59,164,255,0.15); color: var(--enp-blue); border: 1px solid rgba(59,164,255,0.25); }
+.enp-badge--student { background: rgba(16,185,129,0.15); color: var(--enp-green); border: 1px solid rgba(16,185,129,0.25); }
+
+/* ── Stat Cards ───────────────────────────────────────────────────────────── */
+.enp-stats-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+	gap: 1rem;
+	margin-bottom: 2rem;
+}
+.enp-stat-card {
+	background: var(--enp-surf);
+	border: 1px solid var(--enp-bdr);
+	border-radius: var(--enp-radius);
+	padding: 1.25rem 1.5rem;
+	display: flex;
+	flex-direction: column;
+	gap: 0.35rem;
+	transition: border-color var(--enp-trans);
+}
+.enp-stat-card:hover { border-color: var(--enp-bdr2); }
+.enp-stat-card--alert { border-color: rgba(245,158,11,0.3); }
+.enp-stat-card--alert .enp-stat-card__value { color: var(--enp-warn); }
+.enp-stat-card__value {
+	font-size: 2rem;
+	font-weight: 700;
+	color: var(--enp-cyan);
+	line-height: 1;
+}
+.enp-stat-card__label {
+	font-size: 0.8rem;
+	color: var(--enp-muted);
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+}
+
+/* ── Notices ──────────────────────────────────────────────────────────────── */
+.enp-notice {
+	padding: 0.875rem 1.25rem;
+	border-radius: var(--enp-radius);
+	font-size: 0.9rem;
+	border-left: 3px solid currentColor;
+}
+.enp-notice--info    { background: rgba(34,211,238,0.07);  color: #7DE8F8; }
+.enp-notice--success { background: rgba(16,185,129,0.1);   color: #34D399; }
+.enp-notice--error   { background: rgba(239,68,68,0.1);    color: #FCA5A5; }
+.enp-notice--warn    { background: rgba(245,158,11,0.1);   color: #FCD34D; }
+
+/* ── Buttons ──────────────────────────────────────────────────────────────── */
+.enp-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.5rem;
+	padding: 0.625rem 1.25rem;
+	border-radius: 8px;
+	font-size: 0.9rem;
+	font-weight: 600;
+	cursor: pointer;
+	text-decoration: none;
+	border: none;
+	transition: all var(--enp-trans);
+	white-space: nowrap;
+}
+.enp-btn--primary {
+	background: linear-gradient(135deg, var(--enp-cyan) 0%, var(--enp-blue) 100%);
+	color: #05080F;
+}
+.enp-btn--primary:hover { opacity: 0.88; color: #05080F; }
+.enp-btn--ghost {
+	background: transparent;
+	color: var(--enp-cyan);
+	border: 1px solid var(--enp-bdr2);
+}
+.enp-btn--ghost:hover { border-color: var(--enp-cyan); color: var(--enp-cyan); }
+.enp-btn--sm  { padding: 0.4rem 0.9rem; font-size: 0.8rem; }
+.enp-btn--lg  { padding: 0.875rem 2rem; font-size: 1rem; }
+.enp-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ── Login Card ───────────────────────────────────────────────────────────── */
+.enp-login-card {
+	max-width: 420px;
+	margin: 4rem auto;
+	background: var(--enp-surf);
+	border: 1px solid var(--enp-bdr);
+	border-radius: 16px;
+	padding: 2.5rem 2rem;
+	text-align: center;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 1rem;
+}
+.enp-login-card__logo {
+	display: flex;
+	align-items: center;
+	gap: 0.6rem;
+	font-size: 1.1rem;
+	font-weight: 700;
+	color: var(--enp-cyan);
+}
+.enp-login-card__title {
+	margin: 0;
+	font-size: 1.4rem;
+	font-weight: 700;
+	color: var(--enp-text);
+}
+.enp-login-card__sub {
+	margin: 0;
+	font-size: 0.9rem;
+	color: var(--enp-muted);
+	line-height: 1.5;
+}
+.enp-login-card .enp-btn--primary { width: 100%; justify-content: center; }
+.enp-login-card__foot {
+	margin: 0;
+	font-size: 0.82rem;
+	color: var(--enp-muted);
+}
+.enp-login-card__foot a { color: var(--enp-cyan); }
+.enp-login-card__foot a:hover { color: var(--enp-blue); }
+
+/* ── Form Card ────────────────────────────────────────────────────────────── */
+.enp-partner-wrap { max-width: 760px; margin: 0 auto; }
+.enp-form-card {
+	background: var(--enp-surf);
+	border: 1px solid var(--enp-bdr);
+	border-radius: 16px;
+	padding: 2.5rem 2rem;
+}
+.enp-form-card__header { margin-bottom: 2rem; }
+.enp-form-card__header h2 {
+	margin: 0 0 0.5rem;
+	font-size: 1.5rem;
+	font-weight: 700;
+	color: var(--enp-text);
+}
+.enp-form-card__header p {
+	margin: 0;
+	font-size: 0.9rem;
+	color: var(--enp-muted);
+	line-height: 1.6;
+}
+
+/* ── Form elements ────────────────────────────────────────────────────────── */
+.enp-form { display: flex; flex-direction: column; gap: 1.25rem; }
+.enp-form-row { display: flex; gap: 1.25rem; }
+.enp-form-row--half > * { flex: 1 1 0; min-width: 0; }
+@media (max-width: 540px) {
+	.enp-form-row { flex-direction: column; }
+}
+.enp-form-group {
+	display: flex;
+	flex-direction: column;
+	gap: 0.4rem;
+}
+.enp-form-group label {
+	font-size: 0.85rem;
+	font-weight: 600;
+	color: var(--enp-text);
+}
+.enp-form-group input[type="text"],
+.enp-form-group input[type="email"],
+.enp-form-group input[type="tel"],
+.enp-form-group input[type="url"],
+.enp-form-group input[type="number"],
+.enp-form-group input[type="file"],
+.enp-form-group textarea,
+.enp-form-group select {
+	background: var(--enp-surf2);
+	border: 1px solid var(--enp-bdr);
+	border-radius: 8px;
+	color: var(--enp-text);
+	font-size: 0.9rem;
+	padding: 0.625rem 0.875rem;
+	width: 100%;
+	transition: border-color var(--enp-trans);
+	outline: none;
+	box-sizing: border-box;
+}
+.enp-form-group input:focus,
+.enp-form-group textarea:focus,
+.enp-form-group select:focus {
+	border-color: var(--enp-cyan);
+	box-shadow: 0 0 0 3px rgba(34,211,238,0.1);
+}
+.enp-form-group input[type="file"] { cursor: pointer; }
+.enp-form-hint  { font-size: 0.78rem; color: var(--enp-muted); }
+.enp-required   { color: var(--enp-danger); }
+.enp-form-actions { margin-top: 0.5rem; }
+
+/* ── Spinner ──────────────────────────────────────────────────────────────── */
+.enp-btn__spinner {
+	width: 16px;
+	height: 16px;
+	border: 2px solid rgba(5,8,15,0.3);
+	border-top-color: #05080F;
+	border-radius: 50%;
+	animation: enp-spin 0.6s linear infinite;
+}
+@keyframes enp-spin { to { transform: rotate(360deg); } }

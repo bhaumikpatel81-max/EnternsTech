@@ -118,3 +118,25 @@ jobs:
             **/.git*
             **/.git*/**
             config.php
+
+  deploy-plugin:
+    name: Deploy Enterns Portal Plugin
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Upload plugin via FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server:   ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          protocol: ftp
+          port: 21
+          local-dir:  ./enterns-portal/
+          server-dir: /public_html/wp-content/plugins/enterns-portal/
+          dangerous-clean-slate: false
+          exclude: |
+            **/.git*
+            **/.git*/**

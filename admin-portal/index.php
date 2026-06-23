@@ -170,6 +170,40 @@ if ($logged_in) {
     // Tables
     $transactions   = $db->query("SELECT * FROM `{$p}et_transactions` ORDER BY created_at DESC LIMIT 50")->fetchAll();
     $manual_entries = $db->query("SELECT * FROM `{$p}et_revenue_manual` ORDER BY entry_date DESC LIMIT 100")->fetchAll();
+
+    // ── Portal stats (from enterns-portal plugin tables) ──────────────────────
+    // Tables are created when the plugin activates; we guard with try/catch so
+    // the admin portal still works before the plugin is installed.
+    $portal = [
+        'mentors_total'   => 0,
+        'mentors_pending' => 0,
+        'students_total'  => 0,
+        'students_active' => 0,
+        'sessions_total'  => 0,
+        'payments_paid'   => 0.0,
+    ];
+    try {
+        $portal['mentors_total']   = (int) $db->query("SELECT COUNT(*) FROM `{$p}enp_mentors`")->fetchColumn();
+        $portal['mentors_pending'] = (int) $db->query("SELECT COUNT(*) FROM `{$p}enp_mentors` WHERE status='pending'")->fetchColumn();
+        $portal['students_total']  = (int) $db->query("SELECT COUNT(*) FROM `{$p}enp_students`")->fetchColumn();
+        $portal['students_active'] = (int) $db->query("SELECT COUNT(*) FROM `{$p}enp_students` WHERE status='active'")->fetchColumn();
+        $portal['sessions_total']  = (int) $db->query("SELECT COUNT(*) FROM `{$p}enp_sessions`")->fetchColumn();
+        $portal['payments_paid']   = (float) $db->query("SELECT COALESCE(SUM(amount),0) FROM `{$p}enp_payments` WHERE status='paid'")->fetchColumn();
+    } catch (PDOException $e) {
+        // Plugin tables not yet created — portal data will show zeros.
+    }
+
+    // Mentor applications list for Applications tab.
+    $applications = [];
+    try {
+        $applications = $db->query("SELECT * FROM `{$p}enp_mentors` ORDER BY created_at DESC LIMIT 100")->fetchAll();
+    } catch (PDOException $e) {}
+
+    // Student list for Students tab.
+    $portal_students = [];
+    try {
+        $portal_students = $db->query("SELECT s.*, m.full_name AS mentor_name FROM `{$p}enp_students` s LEFT JOIN `{$p}enp_mentors` m ON s.mentor_id = m.id ORDER BY s.created_at DESC LIMIT 100")->fetchAll();
+    } catch (PDOException $e) {}
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -270,9 +304,10 @@ HTML;
 
     /* Nav tabs */
     .nav-tabs { background: var(--surface); border-bottom: 1px solid var(--border); display: flex; gap: .25rem; padding: 0 1.5rem; overflow-x: auto; }
-    .nav-tab { padding: .7rem 1.1rem; color: var(--muted); font-size: .88rem; text-decoration: none; border-bottom: 2px solid transparent; white-space: nowrap; transition: color .2s, border-color .2s; }
+    .nav-tab { padding: .7rem 1.1rem; color: var(--muted); font-size: .88rem; text-decoration: none; border-bottom: 2px solid transparent; white-space: nowrap; transition: color .2s, border-color .2s; display: inline-flex; align-items: center; gap: .35rem; }
     .nav-tab:hover { color: var(--text); }
     .nav-tab.active { color: var(--cyan); border-bottom-color: var(--cyan); font-weight: 600; }
+    .nav-badge { background: rgba(251,191,36,.2); color: var(--gold); border: 1px solid rgba(251,191,36,.35); border-radius: 99px; font-size: .68rem; font-weight: 700; padding: .1rem .45rem; }
 
     /* Main content */
     .main { flex: 1; padding: 1.75rem 1.5rem; max-width: 1200px; width: 100%; margin: 0 auto; }
@@ -384,15 +419,46 @@ HTML;
 
   <!-- Nav tabs -->
   <nav class="nav-tabs">
-    <a href="?section=overview"     class="nav-tab <?= active_section('overview') ?>">Overview</a>
-    <a href="?section=transactions" class="nav-tab <?= active_section('transactions') ?>">PayPal Transactions</a>
-    <a href="?section=manual"       class="nav-tab <?= active_section('manual') ?>">Manual Revenue</a>
+    <a href="?section=overview"      class="nav-tab <?= active_section('overview') ?>">Overview</a>
+    <a href="?section=applications"  class="nav-tab <?= active_section('applications') ?>">
+      Applications<?php if (!empty($portal['mentors_pending'])): ?> <span class="nav-badge"><?= (int)$portal['mentors_pending'] ?></span><?php endif; ?>
+    </a>
+    <a href="?section=mentors"       class="nav-tab <?= active_section('mentors') ?>">Mentors</a>
+    <a href="?section=students"      class="nav-tab <?= active_section('students') ?>">Students</a>
+    <a href="?section=sessions"      class="nav-tab <?= active_section('sessions') ?>">Sessions</a>
+    <a href="?section=payments"      class="nav-tab <?= active_section('payments') ?>">Payments</a>
+    <a href="?section=transactions"  class="nav-tab <?= active_section('transactions') ?>">Legacy Txns</a>
+    <a href="?section=manual"        class="nav-tab <?= active_section('manual') ?>">Manual Revenue</a>
   </nav>
 
   <main class="main">
 
   <?php if ($section === 'overview'): ?>
   <!-- ── OVERVIEW ────────────────────────────────────────────── -->
+
+    <!-- Portal stat cards -->
+    <div class="stats-grid" style="margin-bottom:1rem;">
+      <div class="stat-card" style="border-color:rgba(34,211,238,.25)">
+        <div class="stat-label">Mentor Applications</div>
+        <div class="stat-value cyan"><?= (int)$portal['mentors_total'] ?></div>
+        <div class="stat-sub"><?= (int)$portal['mentors_pending'] ?> pending review</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Students</div>
+        <div class="stat-value cyan"><?= (int)$portal['students_total'] ?></div>
+        <div class="stat-sub"><?= (int)$portal['students_active'] ?> active</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Sessions</div>
+        <div class="stat-value cyan"><?= (int)$portal['sessions_total'] ?></div>
+        <div class="stat-sub">All time</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Portal Payments</div>
+        <div class="stat-value green">&#8377;<?= number_format($portal['payments_paid'], 0) ?></div>
+        <div class="stat-sub">Razorpay confirmed</div>
+      </div>
+    </div>
 
     <!-- Stat cards -->
     <div class="stats-grid">
@@ -570,6 +636,185 @@ HTML;
             </tr>
           <?php endforeach; else: ?>
             <tr class="empty-row"><td colspan="6">No manual entries yet. Add one above.</td></tr>
+          <?php endif; ?>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  <?php elseif ($section === 'applications'): ?>
+  <!-- ── MENTOR APPLICATIONS ────────────────────────────────── -->
+
+    <div class="section-title">
+      Mentor Applications
+      <span><?= count($applications) ?> total</span>
+      <?php if ($portal['mentors_pending'] > 0): ?>
+        <span style="background:rgba(251,191,36,.15);color:var(--gold);border-color:rgba(251,191,36,.3);"><?= (int)$portal['mentors_pending'] ?> pending</span>
+      <?php endif; ?>
+    </div>
+    <p style="color:var(--muted);font-size:.85rem;margin-bottom:1.25rem;">
+      Full approve / reject / request-info workflow is available in Phase 3.
+    </p>
+    <div class="card">
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Name</th><th>Email</th><th>Tech Stack</th><th>LinkedIn</th><th>Status</th><th>Applied</th></tr></thead>
+          <tbody>
+          <?php if ($applications): foreach ($applications as $a): ?>
+            <tr>
+              <td style="font-weight:600"><?= h($a['full_name']) ?></td>
+              <td style="font-size:.82rem;color:var(--muted)"><?= h($a['email']) ?></td>
+              <td style="font-size:.78rem;max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><?= h($a['tech_stack'] ?? '') ?></td>
+              <td><?php if ($a['linkedin']): ?><a href="<?= h($a['linkedin']) ?>" target="_blank" rel="noopener" style="color:var(--cyan);font-size:.8rem;">View ↗</a><?php else: echo '<span style="color:var(--muted)">—</span>'; endif; ?></td>
+              <td>
+                <?php
+                $sc = ['pending'=>'badge-gold','approved'=>'badge-green','rejected'=>''];
+                $cls = $sc[$a['status']] ?? '';
+                ?>
+                <span class="badge <?= $cls ?>"><?= h($a['status']) ?></span>
+              </td>
+              <td style="font-size:.78rem;color:var(--muted)"><?= h(date('d M Y', strtotime($a['created_at']))) ?></td>
+            </tr>
+          <?php endforeach; else: ?>
+            <tr class="empty-row"><td colspan="6">No mentor applications yet. Share the partner form link to start receiving applications.</td></tr>
+          <?php endif; ?>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  <?php elseif ($section === 'mentors'): ?>
+  <!-- ── MENTORS ────────────────────────────────────────────── -->
+
+    <div class="section-title">Mentors <span><?= (int)$portal['mentors_total'] ?> total</span></div>
+    <p style="color:var(--muted);font-size:.85rem;margin-bottom:1.25rem;">
+      Mentor profile editing, custom fields, rate overrides, and assignment controls come in Phase 3.
+    </p>
+    <div class="card">
+      <div class="table-wrap">
+        <?php
+        $all_mentors = [];
+        try { $all_mentors = $db->query("SELECT * FROM `{$p}enp_mentors` WHERE status='approved' ORDER BY full_name")->fetchAll(); } catch (PDOException $e) {}
+        ?>
+        <table>
+          <thead><tr><th>Name</th><th>Email</th><th>Tech Stack</th><th>Slots</th><th>Rate / Session</th><th>Status</th></tr></thead>
+          <tbody>
+          <?php if ($all_mentors): foreach ($all_mentors as $m): ?>
+            <tr>
+              <td style="font-weight:600"><?= h($m['full_name']) ?></td>
+              <td style="font-size:.82rem;color:var(--muted)"><?= h($m['email']) ?></td>
+              <td style="font-size:.78rem;max-width:200px"><?= h($m['tech_stack'] ?? '') ?></td>
+              <td><?= (int)$m['available_slots'] ?></td>
+              <td style="color:var(--green)">&#8377;<?= number_format((float)$m['rate_per_session'], 0) ?></td>
+              <td><span class="badge badge-green"><?= h($m['status']) ?></span></td>
+            </tr>
+          <?php endforeach; else: ?>
+            <tr class="empty-row"><td colspan="6">No approved mentors yet.</td></tr>
+          <?php endif; ?>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  <?php elseif ($section === 'students'): ?>
+  <!-- ── STUDENTS ───────────────────────────────────────────── -->
+
+    <div class="section-title">Students <span><?= (int)$portal['students_total'] ?> total</span></div>
+    <p style="color:var(--muted);font-size:.85rem;margin-bottom:1.25rem;">
+      Full student management (activate, assign mentor, override sessions) comes in Phase 4.
+    </p>
+    <div class="card">
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Name</th><th>Plan</th><th>Sessions</th><th>Mentor</th><th>CV Redesign</th><th>Status</th><th>Enrolled</th></tr></thead>
+          <tbody>
+          <?php if ($portal_students): foreach ($portal_students as $s): ?>
+            <tr>
+              <td style="font-weight:600"><?= h($s['full_name']) ?></td>
+              <td><span class="badge badge-cyan"><?= h(strtoupper($s['plan_id'])) ?></span></td>
+              <td><?= (int)$s['sessions_used'] ?> / <?= (int)$s['sessions_total'] ?></td>
+              <td style="font-size:.82rem"><?= $s['mentor_name'] ? h($s['mentor_name']) : '<span style="color:var(--muted)">Unassigned</span>' ?></td>
+              <td><span class="badge <?= $s['cv_redesign_status']==='done' ? 'badge-green' : 'badge-gold' ?>"><?= h($s['cv_redesign_status']) ?></span></td>
+              <td><span class="badge <?= $s['status']==='active' ? 'badge-green' : '' ?>"><?= h($s['status']) ?></span></td>
+              <td style="font-size:.78rem;color:var(--muted)"><?= h(date('d M Y', strtotime($s['created_at']))) ?></td>
+            </tr>
+          <?php endforeach; else: ?>
+            <tr class="empty-row"><td colspan="7">No students enrolled yet.</td></tr>
+          <?php endif; ?>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  <?php elseif ($section === 'sessions'): ?>
+  <!-- ── SESSIONS ───────────────────────────────────────────── -->
+
+    <div class="section-title">Sessions <span><?= (int)$portal['sessions_total'] ?> total</span></div>
+    <div class="card">
+      <div class="table-wrap">
+        <?php
+        $all_sessions = [];
+        try {
+            $all_sessions = $db->query("
+                SELECT ss.*, st.full_name AS student_name, m.full_name AS mentor_name
+                FROM `{$p}enp_sessions` ss
+                LEFT JOIN `{$p}enp_students` st ON ss.student_id = st.id
+                LEFT JOIN `{$p}enp_mentors`  m  ON ss.mentor_id  = m.id
+                ORDER BY ss.scheduled_at DESC LIMIT 100
+            ")->fetchAll();
+        } catch (PDOException $e) {}
+        ?>
+        <table>
+          <thead><tr><th>Date</th><th>Student</th><th>Mentor</th><th>Duration</th><th>Rate</th><th>Status</th><th>Mentor Paid</th></tr></thead>
+          <tbody>
+          <?php if ($all_sessions): foreach ($all_sessions as $ss): ?>
+            <tr>
+              <td style="white-space:nowrap"><?= h(date('d M Y H:i', strtotime($ss['scheduled_at']))) ?></td>
+              <td><?= h($ss['student_name'] ?? '—') ?></td>
+              <td><?= h($ss['mentor_name']  ?? '—') ?></td>
+              <td><?= (int)$ss['duration_min'] ?> min</td>
+              <td style="color:var(--green)">&#8377;<?= number_format((float)$ss['rate_applied'], 0) ?></td>
+              <td><span class="badge <?= $ss['status']==='completed' ? 'badge-green' : 'badge-cyan' ?>"><?= h($ss['status']) ?></span></td>
+              <td><?= $ss['mentor_paid'] ? '<span class="badge badge-green">Yes</span>' : '<span style="color:var(--muted);font-size:.8rem;">No</span>' ?></td>
+            </tr>
+          <?php endforeach; else: ?>
+            <tr class="empty-row"><td colspan="7">No sessions recorded yet.</td></tr>
+          <?php endif; ?>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  <?php elseif ($section === 'payments'): ?>
+  <!-- ── PORTAL PAYMENTS ────────────────────────────────────── -->
+
+    <div class="section-title">Portal Payments</div>
+    <p style="color:var(--muted);font-size:.85rem;margin-bottom:1.25rem;">
+      Razorpay payment integration and manual "mark paid" are built in Phase 4.
+    </p>
+    <div class="card">
+      <div class="table-wrap">
+        <?php
+        $portal_payments = [];
+        try {
+            $portal_payments = $db->query("SELECT * FROM `{$p}enp_payments` ORDER BY created_at DESC LIMIT 100")->fetchAll();
+        } catch (PDOException $e) {}
+        ?>
+        <table>
+          <thead><tr><th>Date</th><th>Email</th><th>Plan</th><th>Amount</th><th>Gateway</th><th>Gateway ID</th><th>Status</th></tr></thead>
+          <tbody>
+          <?php if ($portal_payments): foreach ($portal_payments as $pay): ?>
+            <tr>
+              <td style="white-space:nowrap"><?= h(date('d M Y', strtotime($pay['created_at']))) ?></td>
+              <td style="font-size:.82rem"><?= h($pay['email']) ?></td>
+              <td><span class="badge badge-cyan"><?= h(strtoupper($pay['plan_id'])) ?></span></td>
+              <td class="amount">&#8377;<?= number_format((float)$pay['amount'], 0) ?></td>
+              <td style="font-size:.8rem"><?= h($pay['gateway']) ?></td>
+              <td style="font-size:.76rem;color:var(--muted);font-family:monospace"><?= h($pay['gateway_payment_id'] ?: $pay['gateway_order_id'] ?: '—') ?></td>
+              <td><span class="badge <?= $pay['status']==='paid' ? 'badge-green' : 'badge-gold' ?>"><?= h($pay['status']) ?></span></td>
+            </tr>
+          <?php endforeach; else: ?>
+            <tr class="empty-row"><td colspan="7">No portal payments yet. Razorpay integration is built in Phase 4.</td></tr>
           <?php endif; ?>
           </tbody>
         </table>
