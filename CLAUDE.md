@@ -4,31 +4,35 @@
 
 ```
 EnternsTech/
-├── enterns-portal/           WordPress plugin (PHP 7.4+)
-│   ├── enterns-portal.php    Plugin entry — defines ENP_VERSION, ENP_DIR, ENP_URL
-│   ├── includes/
-│   │   ├── install.php       Activation: tables, roles, WP pages
-│   │   ├── config.php        Constants (email, plan IDs, Razorpay keys)
-│   │   ├── payments.php      Razorpay order creation + webhook verification
-│   │   ├── student.php       Student AJAX handlers
-│   │   ├── shortcodes.php    [enp_admin], [enp_mentor], [enp_student], [enp_partner_form]
-│   │   ├── psy-bank.php      AUTO-GENERATED — 178 question items as a PHP array
-│   │   ├── psy-install.php   Psychometric tables + seed + helpers
-│   │   ├── psy-resolver.php  ENP_Psy_Resolver — per-candidate paper builder
-│   │   ├── psy-scorer.php    ENP_Psy_Scorer — scoring engine (static methods)
-│   │   ├── psy-ajax.php      AJAX endpoints for candidate + admin psychometric flows
-│   │   └── psy-shortcode.php [enp_psychometric] shortcode + asset enqueueing
-│   ├── templates/
-│   │   ├── student-dashboard.php
-│   │   ├── mentor-dashboard.php
-│   │   ├── partner-form.php
-│   │   └── psy-candidate.php  Multi-step candidate assessment UI
-│   ├── assets/
-│   │   ├── css/portal.css     Dark-theme design system (--cyan, --bg, --surf, etc.)
-│   │   ├── css/psychometric.css  Assessment-specific styles
-│   │   └── js/psychometric.js    Candidate flow JS (multi-step, autosave, drag-and-drop rank)
-│   └── tests/
-│       └── psy-scorer-test.php  Unit tests — run: php enterns-portal/tests/psy-scorer-test.php
+├── wp-content/
+│   ├── themes/
+│   │   └── enternstech/          WordPress theme
+│   └── plugins/
+│       └── enterns-portal/       WordPress plugin (PHP 7.4+)
+│           ├── enterns-portal.php    Plugin entry — defines ENP_VERSION, ENP_DIR, ENP_URL
+│           ├── includes/
+│           │   ├── install.php       Activation: tables, roles, WP pages
+│           │   ├── config.php        Constants (email, plan IDs, Razorpay keys)
+│           │   ├── payments.php      Razorpay order creation + webhook verification
+│           │   ├── student.php       Student AJAX handlers
+│           │   ├── shortcodes.php    [enp_admin], [enp_mentor], [enp_student], [enp_partner_form]
+│           │   ├── psy-bank.php      AUTO-GENERATED — 178 question items as a PHP array
+│           │   ├── psy-install.php   Psychometric tables + seed + helpers
+│           │   ├── psy-resolver.php  ENP_Psy_Resolver — per-candidate paper builder
+│           │   ├── psy-scorer.php    ENP_Psy_Scorer — scoring engine (static methods)
+│           │   ├── psy-ajax.php      AJAX endpoints for candidate + admin psychometric flows
+│           │   └── psy-shortcode.php [enp_psychometric] shortcode + asset enqueueing
+│           ├── templates/
+│           │   ├── student-dashboard.php
+│           │   ├── mentor-dashboard.php
+│           │   ├── partner-form.php
+│           │   └── psy-candidate.php  Multi-step candidate assessment UI
+│           ├── assets/
+│           │   ├── css/portal.css     Dark-theme design system (--cyan, --bg, --surf, etc.)
+│           │   ├── css/psychometric.css  Assessment-specific styles
+│           │   └── js/psychometric.js    Candidate flow JS (multi-step, autosave, drag-and-drop rank)
+│           └── tests/
+│               └── psy-scorer-test.php  Unit tests — run: php wp-content/plugins/enterns-portal/tests/psy-scorer-test.php
 ├── admin-portal/
 │   ├── index.php             Standalone admin portal (session auth + PDO + WP bootstrap)
 │   └── config.php            DB creds (not committed)
@@ -105,7 +109,7 @@ node scripts/parse-bank.js   # (scratchpad one-off; not committed)
 
 ## Running tests
 ```bash
-php enterns-portal/tests/psy-scorer-test.php
+php wp-content/plugins/enterns-portal/tests/psy-scorer-test.php
 # Should print: N/N passed — all green
 ```
 No WP or DB needed — tests use `ReflectionClass` to access private static methods.
