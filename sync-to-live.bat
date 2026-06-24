@@ -61,10 +61,10 @@ echo option batch continue
 echo option confirm off
 echo.
 echo # --- Theme ---
-echo synchronize remote -delete -criteria=size "%SCRIPT_DIR%wp-content\themes\enternstech" "/public_html/wp-content/themes/enternstech"
+echo synchronize remote -delete -criteria=size "%SCRIPT_DIR%wp-content\themes\enternstech" "/public_html/enternstech/wp-content/themes/enternstech"
 echo.
 echo # --- Plugin ---
-echo synchronize remote -delete -criteria=size "%SCRIPT_DIR%wp-content\plugins\enterns-portal" "/public_html/wp-content/plugins/enterns-portal"
+echo synchronize remote -delete -criteria=size "%SCRIPT_DIR%wp-content\plugins\enterns-portal" "/public_html/enternstech/wp-content/plugins/enterns-portal"
 echo.
 echo # --- Admin Portal (skip config.php) ---
 echo synchronize remote -delete -criteria=size -filemask="^config.php" "%SCRIPT_DIR%admin-portal" "/public_html/admin-portal"
