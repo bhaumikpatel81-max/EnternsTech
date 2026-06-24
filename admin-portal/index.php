@@ -189,7 +189,11 @@ if ($logged_in && $action === 'approve_mentor') {
         http_response_code(403); die('CSRF mismatch.');
     }
     if (!function_exists('wp_create_user')) {
+<<<<<<< HEAD
         die('WordPress not loaded. Set ENP_WP_LOAD_PATH in admin-portal/config.php to the full wp-load.php path, for example /home/USER/public_html/enternstech/wp-load.php.');
+=======
+        die('WordPress not loaded. Ensure wp-load.php exists at ' . htmlspecialchars(dirname(__DIR__) . '/enternstech', ENT_QUOTES));
+>>>>>>> 66acca3 (Fix admin portal wp-load path for subdirectory WordPress install)
     }
     $mid = intval($_POST['mentor_id'] ?? 0);
     $db  = get_db(); $p = DB_PREFIX;
