@@ -1044,7 +1044,7 @@ footer{background:rgba(0,0,0,.6);border-top:1px solid var(--border);padding:60px
         <div>
           <div style="font-weight:600;margin-bottom:.2rem;">Partner with us</div>
           <p style="color:#9FB1CE;font-size:.85rem;line-height:1.55;">Recruiting firms, training companies, and referral partners are welcome.</p>
-          <button class="et-btn-outline" data-open-partner style="margin-top:.75rem;padding:10px 18px;font-size:.82rem;">Become a partner</button>
+          <a class="et-btn-outline" href="<?php echo esc_url( home_url( '/partner-with-us/' ) ); ?>" style="display:inline-flex;margin-top:.75rem;padding:10px 18px;font-size:.82rem;">Become a partner</a>
         </div>
       </div>
     </div>
@@ -1075,7 +1075,7 @@ footer{background:rgba(0,0,0,.6);border-top:1px solid var(--border);padding:60px
       <h4>Connect</h4>
       <ul>
         <li><a href="mailto:info@enternstech.com">info@enternstech.com</a></li>
-        <li><span data-open-partner>Partner with Us</span></li>
+        <li><a href="<?php echo esc_url( home_url( '/partner-with-us/' ) ); ?>">Partner with Us</a></li>
         <li><span data-open-admin style="color:var(--muted);font-size:.78rem;cursor:pointer;">Admin login</span></li>
       </ul>
     </div>

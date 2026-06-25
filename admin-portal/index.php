@@ -20,8 +20,39 @@ require_once __DIR__ . '/config.php';
 
 // ── WordPress bootstrap ───────────────────────────────────────────────────────
 // Loads wp_create_user(), get_password_reset_key(), enp_send_mail(), etc.
-$_enp_wp = dirname(__DIR__) . '/wp-load.php';
-if (!defined('ABSPATH') && file_exists($_enp_wp)) {
+function enp_admin_find_wp_load(): string {
+    $paths = [];
+
+    if (defined('ENP_WP_LOAD_PATH')) {
+        $paths[] = ENP_WP_LOAD_PATH;
+    }
+
+    $env_path = getenv('ENP_WP_LOAD_PATH');
+    if ($env_path) {
+        $paths[] = $env_path;
+    }
+
+    $parent = dirname(__DIR__);
+    $paths[] = $parent . '/wp-load.php';
+    $paths[] = $parent . '/enternstech/wp-load.php';
+
+    $docroot = !empty($_SERVER['DOCUMENT_ROOT']) ? rtrim($_SERVER['DOCUMENT_ROOT'], '/\\') : '';
+    if ($docroot) {
+        $paths[] = $docroot . '/wp-load.php';
+        $paths[] = $docroot . '/enternstech/wp-load.php';
+    }
+
+    foreach (array_unique($paths) as $path) {
+        if ($path && is_readable($path)) {
+            return $path;
+        }
+    }
+
+    return '';
+}
+
+$_enp_wp = enp_admin_find_wp_load();
+if (!defined('ABSPATH') && $_enp_wp) {
     require_once $_enp_wp;
 }
 unset($_enp_wp);
@@ -111,6 +142,9 @@ $csrf = $logged_in ? ($_SESSION['enp_csrf'] ?? '') : '';
 
 // Add manual revenue
 if ($logged_in && $action === 'add_revenue') {
+    if (!isset($_SESSION['enp_csrf']) || !hash_equals($_SESSION['enp_csrf'], $_POST['csrf'] ?? '')) {
+        http_response_code(403); die('CSRF mismatch.');
+    }
     $db   = get_db();
     $stmt = $db->prepare('INSERT INTO `' . DB_PREFIX . 'et_revenue_manual` (entry_date, amount, description, category) VALUES (?, ?, ?, ?)');
     $stmt->execute([
@@ -125,6 +159,9 @@ if ($logged_in && $action === 'add_revenue') {
 
 // Delete manual revenue
 if ($logged_in && $action === 'delete_revenue') {
+    if (!isset($_SESSION['enp_csrf']) || !hash_equals($_SESSION['enp_csrf'], $_POST['csrf'] ?? '')) {
+        http_response_code(403); die('CSRF mismatch.');
+    }
     $db   = get_db();
     $stmt = $db->prepare('DELETE FROM `' . DB_PREFIX . 'et_revenue_manual` WHERE id = ?');
     $stmt->execute([intval($_POST['entry_id'] ?? 0)]);
@@ -132,8 +169,11 @@ if ($logged_in && $action === 'delete_revenue') {
     exit;
 }
 
-// Delete PayPal transaction
+// Delete legacy checkout transaction
 if ($logged_in && $action === 'delete_transaction') {
+    if (!isset($_SESSION['enp_csrf']) || !hash_equals($_SESSION['enp_csrf'], $_POST['csrf'] ?? '')) {
+        http_response_code(403); die('CSRF mismatch.');
+    }
     $db   = get_db();
     $stmt = $db->prepare('DELETE FROM `' . DB_PREFIX . 'et_transactions` WHERE id = ?');
     $stmt->execute([intval($_POST['tx_id'] ?? 0)]);
@@ -149,7 +189,7 @@ if ($logged_in && $action === 'approve_mentor') {
         http_response_code(403); die('CSRF mismatch.');
     }
     if (!function_exists('wp_create_user')) {
-        die('WordPress not loaded. Ensure /wp-load.php exists at ' . htmlspecialchars(dirname(__DIR__), ENT_QUOTES));
+        die('WordPress not loaded. Set ENP_WP_LOAD_PATH in admin-portal/config.php to the full wp-load.php path, for example /home/USER/public_html/enternstech/wp-load.php.');
     }
     $mid = intval($_POST['mentor_id'] ?? 0);
     $db  = get_db(); $p = DB_PREFIX;
@@ -636,7 +676,10 @@ define('DB_HOST',   'localhost');
 define('DB_NAME',   'your_wp_database_name');
 define('DB_USER',   'your_db_username');
 define('DB_PASS',   'your_db_password');
-define('DB_PREFIX', 'wp_');</pre>
+define('DB_PREFIX', 'wp_');
+
+// Optional if admin-portal is outside WordPress:
+// define('ENP_WP_LOAD_PATH', '/home/ACCOUNT/public_html/enternstech/wp-load.php');</pre>
 <p>You can find the database details in your Bluehost cPanel → MySQL Databases, and in your WordPress <code>wp-config.php</code> file.</p>
 <p>After uploading <code>config.php</code>, reload this page.</p>
 </div></body></html>
@@ -901,7 +944,7 @@ HTML;
       <div class="stat-card">
         <div class="stat-label">Total Revenue (All Time)</div>
         <div class="stat-value cyan"><?= fmt_money($stats['grand_total']) ?></div>
-        <div class="stat-sub">PayPal + Manual combined</div>
+        <div class="stat-sub">Legacy checkout + Manual combined</div>
       </div>
       <div class="stat-card">
         <div class="stat-label">This Month</div>
@@ -909,7 +952,7 @@ HTML;
         <div class="stat-sub"><?= date('F Y') ?></div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">PayPal Revenue</div>
+        <div class="stat-label">Legacy Checkout Revenue</div>
         <div class="stat-value cyan"><?= fmt_money($stats['paypal_total']) ?></div>
         <div class="stat-sub"><?= $stats['tx_count'] ?> payment(s)</div>
       </div>
@@ -928,8 +971,8 @@ HTML;
       </div>
     </div>
 
-    <!-- Recent activity (last 5 PayPal + last 5 manual) -->
-    <div class="section-title">Recent PayPal Transactions <span><?= count($transactions) ?> total</span></div>
+    <!-- Recent activity (last 5 legacy checkout + last 5 manual) -->
+    <div class="section-title">Recent Legacy Checkout Transactions <span><?= count($transactions) ?> total</span></div>
     <div class="card">
       <div class="table-wrap">
         <table>
@@ -944,7 +987,7 @@ HTML;
               <td><span class="badge badge-green"><?= h($t['status']) ?></span></td>
             </tr>
           <?php endforeach; else: ?>
-            <tr class="empty-row"><td colspan="5">No PayPal transactions recorded yet.</td></tr>
+            <tr class="empty-row"><td colspan="5">No legacy checkout transactions recorded yet.</td></tr>
           <?php endif; ?>
           </tbody>
         </table>
@@ -975,9 +1018,9 @@ HTML;
   <?php elseif ($section === 'transactions'): ?>
   <!-- ── PAYPAL TRANSACTIONS ─────────────────────────────────── -->
 
-    <div class="section-title">PayPal Transactions <span><?= count($transactions) ?> total</span></div>
+    <div class="section-title">Legacy Checkout Transactions <span><?= count($transactions) ?> total</span></div>
     <p style="color:var(--muted);font-size:.85rem;margin-bottom:1.25rem">
-      Transactions are logged automatically when a payment is captured on the website.
+      This legacy table is retained for older checkout records. Current Razorpay student payments appear under Portal Payments.
     </p>
     <div class="card">
       <div class="table-wrap">
@@ -996,13 +1039,14 @@ HTML;
               <td>
                 <form method="POST" onsubmit="return confirm('Delete this transaction record?')">
                   <input type="hidden" name="action" value="delete_transaction">
+                  <input type="hidden" name="csrf" value="<?= h($csrf) ?>">
                   <input type="hidden" name="tx_id" value="<?= (int)$t['id'] ?>">
                   <button class="btn-del" type="submit">Delete</button>
                 </form>
               </td>
             </tr>
           <?php endforeach; else: ?>
-            <tr class="empty-row"><td colspan="8">No PayPal transactions recorded yet.<br><small>Transactions appear here once a customer completes payment.</small></td></tr>
+            <tr class="empty-row"><td colspan="8">No legacy checkout transactions recorded yet.<br><small>Current Razorpay student payments appear under Portal Payments.</small></td></tr>
           <?php endif; ?>
           </tbody>
         </table>
@@ -1020,6 +1064,7 @@ HTML;
     <div class="form-card">
       <form method="POST">
         <input type="hidden" name="action" value="add_revenue">
+        <input type="hidden" name="csrf" value="<?= h($csrf) ?>">
         <div class="form-grid">
           <div class="form-group">
             <label>Date</label>
@@ -1065,6 +1110,7 @@ HTML;
               <td>
                 <form method="POST" onsubmit="return confirm('Delete this entry?')">
                   <input type="hidden" name="action" value="delete_revenue">
+                  <input type="hidden" name="csrf" value="<?= h($csrf) ?>">
                   <input type="hidden" name="entry_id" value="<?= (int)$m['id'] ?>">
                   <button class="btn-del" type="submit">Delete</button>
                 </form>
@@ -1950,7 +1996,7 @@ var portalNonce = <?= json_encode(function_exists('wp_create_nonce') ? wp_create
   if (document.getElementById('revenueChart') === null) return;
 
   const labels  = <?= json_encode($monthly_labels) ?>;
-  const paypal  = <?= json_encode($monthly_paypal) ?>;
+  const legacy  = <?= json_encode($monthly_paypal) ?>;
   const manual  = <?= json_encode($monthly_manual) ?>;
 
   new Chart(document.getElementById('revenueChart'), {
@@ -1958,7 +2004,7 @@ var portalNonce = <?= json_encode(function_exists('wp_create_nonce') ? wp_create
     data: {
       labels,
       datasets: [
-        { label: 'PayPal', data: paypal, backgroundColor: 'rgba(34,211,238,.7)', borderRadius: 4 },
+        { label: 'Legacy Checkout', data: legacy, backgroundColor: 'rgba(34,211,238,.7)', borderRadius: 4 },
         { label: 'Manual', data: manual, backgroundColor: 'rgba(251,191,36,.6)', borderRadius: 4 },
       ]
     },

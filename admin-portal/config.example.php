@@ -21,3 +21,7 @@ define('DB_NAME',   'your_wordpress_database_name');
 define('DB_USER',   'your_database_username');
 define('DB_PASS',   'your_database_password');
 define('DB_PREFIX', 'wp_');
+
+// Optional override. Use this when admin-portal is outside the WordPress folder.
+// Example Bluehost path: /home/ACCOUNT/public_html/enternstech/wp-load.php
+// define('ENP_WP_LOAD_PATH', '/home/ACCOUNT/public_html/enternstech/wp-load.php');

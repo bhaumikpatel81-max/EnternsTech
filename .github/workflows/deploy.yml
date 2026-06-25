@@ -1,42 +1,46 @@
 name: Deploy to Bluehost
 
-# Deploys theme, admin portal, and plugin to the live server via FTP.
-# Triggered automatically on every push to main, or manually via the
-# "Run workflow" button in the GitHub Actions tab.
-#
-# ─────────────────────────────────────────────────────────────────────────────
-# ONE-TIME SETUP — add these three secrets in GitHub:
-#   Repository → Settings → Secrets and variables → Actions → New repository secret
-#
-#   Secret name    Value (find in cPanel → FTP Accounts)
-#   FTP_SERVER     ftp.enternstech.com
-#   FTP_USERNAME   Your FTP account username
-#   FTP_PASSWORD   Your FTP account password
-# ─────────────────────────────────────────────────────────────────────────────
-
 on:
   push:
     branches: [ main ]
-  workflow_dispatch:    # "Run workflow" button in GitHub Actions tab
+  workflow_dispatch:
 
 jobs:
+  validate:
+    name: Validate PHP
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
 
-  # ── 1. WordPress Theme ────────────────────────────────────────────────────
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '7.4'
+          coverage: none
+
+      - name: Lint PHP files
+        run: |
+          find admin-portal wp-content -name '*.php' -print0 | xargs -0 -n1 php -l
+
+      - name: Run psychometric scorer tests
+        run: php wp-content/plugins/enterns-portal/tests/psy-scorer-test.php
+
   deploy-theme:
     name: Deploy WordPress Theme
     runs-on: ubuntu-latest
+    needs: validate
     steps:
       - uses: actions/checkout@v4
 
       - name: Upload theme via FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
-          server:   ${{ secrets.FTP_SERVER }}
+          server: ${{ secrets.FTP_SERVER }}
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
           protocol: ftp
           port: 21
-          local-dir:  ./wp-content/themes/enternstech/
+          local-dir: ./wp-content/themes/enternstech/
           server-dir: /public_html/enternstech/wp-content/themes/enternstech/
           dangerous-clean-slate: false
           exclude: |
@@ -44,47 +48,48 @@ jobs:
             **/.git*/**
             **/node_modules/**
 
-  # ── 2. Admin Portal ───────────────────────────────────────────────────────
-  deploy-admin-portal:
-    name: Deploy Admin Portal
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Upload admin portal via FTP
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
-        with:
-          server:   ${{ secrets.FTP_SERVER }}
-          username: ${{ secrets.FTP_USERNAME }}
-          password: ${{ secrets.FTP_PASSWORD }}
-          protocol: ftp
-          port: 21
-          local-dir:  ./admin-portal/
-          server-dir: /public_html/admin-portal/
-          dangerous-clean-slate: false
-          exclude: |
-            **/.git*
-            **/.git*/**
-            config.php
-
-  # ── 3. Enterns Portal Plugin ──────────────────────────────────────────────
   deploy-plugin:
     name: Deploy Enterns Portal Plugin
     runs-on: ubuntu-latest
+    needs: validate
     steps:
       - uses: actions/checkout@v4
 
       - name: Upload plugin via FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
-          server:   ${{ secrets.FTP_SERVER }}
+          server: ${{ secrets.FTP_SERVER }}
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
           protocol: ftp
           port: 21
-          local-dir:  ./wp-content/plugins/enterns-portal/
+          local-dir: ./wp-content/plugins/enterns-portal/
           server-dir: /public_html/enternstech/wp-content/plugins/enterns-portal/
           dangerous-clean-slate: false
           exclude: |
             **/.git*
             **/.git*/**
+            **/node_modules/**
+
+  deploy-admin-portal:
+    name: Deploy Admin Portal
+    runs-on: ubuntu-latest
+    needs: validate
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Upload admin portal via FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          protocol: ftp
+          port: 21
+          local-dir: ./admin-portal/
+          server-dir: /public_html/admin-portal/
+          dangerous-clean-slate: false
+          exclude: |
+            **/.git*
+            **/.git*/**
+            config.php

@@ -3,7 +3,7 @@ Theme Name: EnternsTech
 Theme URI: https://www.enternstech.com
 Author: Enterns Tech
 Author URI: https://www.enternstech.com
-Description: Enterns Tech — IT Training & Placement. A modern dark-themed site (home, pricing, payment, partner registration) built on the Design Canvas reactive bundle and served full-screen via the front page. PayPal-ready.
+Description: Enterns Tech IT training, placement, portals, and Razorpay enrolment for WordPress.
 Version: 2.0.0
 Requires at least: 5.8
 Tested up to: 6.5
@@ -23,9 +23,8 @@ Tags: dark, technology, education, corporate, full-width-template, custom-menu, 
  * Text           : #ECF2FF
  * Muted Text     : #6B7280
  *
- * NOTE: The main site styles live inside the bundled Design Canvas HTML
- * (static/index.html). This file exists for WordPress theme identification
- * and provides fallback styling for the header/footer used on inner pages.
+ * NOTE: Most public homepage styles live in front-page.php and theme assets.
+ * This file exists for WordPress theme identification and fallback inner-page styling.
  */
 
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }

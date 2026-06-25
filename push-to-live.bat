@@ -15,7 +15,7 @@ if "%MSG%"=="" set MSG=Update site
 
 echo.
 echo  Preparing files...
-git add "wp-content/themes/enternstech" "wp-content/plugins/enterns-portal" "admin-portal" ".github"
+git add "wp-content/themes/enternstech" "wp-content/plugins/enterns-portal" "admin-portal" ".github" "README.md"
 
 git diff --cached --quiet
 if %ERRORLEVEL%==0 (
