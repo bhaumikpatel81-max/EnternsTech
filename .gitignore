@@ -26,3 +26,7 @@ ftp-credentials.txt
 
 # Local archives
 *.zip
+
+# Diagnostic scripts (local troubleshooting only, do not commit)
+diagnose-*.php
+wp-content/enterns-deploy-log.txt
