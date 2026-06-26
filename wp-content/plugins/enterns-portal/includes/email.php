@@ -124,4 +124,14 @@ function enp_mail_wrap( $title, $content ) {
         <tr>
           <td style="padding:20px 32px;border-top:1px solid rgba(34,211,238,0.08);font-size:12px;color:<?php echo $muted; ?>;">
             You received this email from Enterns Tech. If you did not expect it, you can safely ignore it.
-            &mdash; <a href="<?php echo $site; ?>" style="color:<?php echo $cyan; ?>
+            &mdash; <a href="<?php echo $site; ?>" style="color:<?php echo $cyan; ?>;text-decoration:none;">enternstech.com</a>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>
+	<?php
+	return ob_get_clean();
+}

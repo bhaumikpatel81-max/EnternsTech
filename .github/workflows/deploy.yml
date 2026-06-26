@@ -1,4 +1,4 @@
-name: Deploy to Bluehost
+name: Validate WordPress Project
 
 on:
   push:
@@ -24,75 +24,6 @@ jobs:
 
       - name: Run psychometric scorer tests
         run: php wp-content/plugins/enterns-portal/tests/psy-scorer-test.php
-
-  deploy-theme:
-    name: Deploy WordPress Theme
-    runs-on: ubuntu-latest
-    needs: validate
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Upload theme via FTP
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
-        with:
-          server: ${{ secrets.FTP_SERVER }}
-          username: ${{ secrets.FTP_USERNAME }}
-          password: ${{ secrets.FTP_PASSWORD }}
-          protocol: ftp
-          port: 21
-          local-dir: ./wp-content/themes/enternstech/
-          server-dir: /public_html/enternstech/wp-content/themes/enternstech/
-          dangerous-clean-slate: false
-          exclude: |
-            **/.git*
-            **/.git*/**
-            **/node_modules/**
-
-  deploy-plugin:
-    name: Deploy Enterns Portal Plugin
-    runs-on: ubuntu-latest
-    needs: validate
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Upload plugin via FTP
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
-        with:
-          server: ${{ secrets.FTP_SERVER }}
-          username: ${{ secrets.FTP_USERNAME }}
-          password: ${{ secrets.FTP_PASSWORD }}
-          protocol: ftp
-          port: 21
-          local-dir: ./wp-content/plugins/enterns-portal/
-          server-dir: /public_html/enternstech/wp-content/plugins/enterns-portal/
-          dangerous-clean-slate: false
-          exclude: |
-            **/.git*
-            **/.git*/**
-            **/node_modules/**
-
-  deploy-admin-portal:
-    name: Deploy Admin Portal
-    runs-on: ubuntu-latest
-    needs: validate
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Upload admin portal via FTP
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
-        with:
-          server: ${{ secrets.FTP_SERVER }}
-          username: ${{ secrets.FTP_USERNAME }}
-          password: ${{ secrets.FTP_PASSWORD }}
-          protocol: ftp
-          port: 21
-          local-dir: ./admin-portal/
-          server-dir: /public_html/admin-portal/
-          dangerous-clean-slate: false
-          exclude: |
-            **/.git*
-            **/.git*/**
-            config.php
 
   package-artifacts:
     name: Package theme + plugin zips

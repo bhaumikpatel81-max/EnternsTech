@@ -202,4 +202,35 @@ define( 'ENP_SMTP_FROM_NAME', 'Enterns Tech' );" ); ?></textarea>
 			<li><?php esc_html_e( 'Email From shows "Enterns Tech <admin@enternstech.com>".', 'enterns-portal' ); ?></li>
 			<li><?php esc_html_e( 'SPF, DKIM, and DMARC records added in DNS.', 'enterns-portal' ); ?></li>
 			<li><?php esc_html_e( 'Create a test user → Forgot Password → email arrives → link opens WP password screen.', 'enterns-portal' ); ?></li>
-			<li><?php esc_html_e( 'After setting password, login lands on correct portal (/mentor/ or /student/).', 'enterns-portal' ); ?>
+			<li><?php esc_html_e( 'After setting password, login lands on correct portal (/mentor/ or /student/).', 'enterns-portal' ); ?></li>
+		</ul>
+	</div>
+	<?php
+}
+
+add_action( 'wp_ajax_enp_test_email', 'enp_ajax_test_email' );
+function enp_ajax_test_email() {
+	if ( ! current_user_can( 'manage_options' ) ) {
+		wp_send_json_error( __( 'Permission denied.', 'enterns-portal' ) );
+	}
+
+	check_ajax_referer( 'enp_test_email', 'nonce' );
+
+	$recipient = isset( $_POST['recipient'] ) ? sanitize_email( wp_unslash( $_POST['recipient'] ) ) : '';
+	if ( ! is_email( $recipient ) ) {
+		wp_send_json_error( __( 'Enter a valid email address.', 'enterns-portal' ) );
+	}
+
+	$sent = enp_send_mail(
+		$recipient,
+		__( 'Enterns Portal test email', 'enterns-portal' ),
+		'<p>' . esc_html__( 'SMTP is working for Enterns Portal.', 'enterns-portal' ) . '</p>',
+		false
+	);
+
+	if ( $sent ) {
+		wp_send_json_success( __( 'Test email sent.', 'enterns-portal' ) );
+	}
+
+	wp_send_json_error( __( 'Email could not be sent. Check SMTP settings and server mail logs.', 'enterns-portal' ) );
+}
