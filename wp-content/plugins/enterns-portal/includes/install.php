@@ -202,3 +202,28 @@ function enp_create_pages() {
 		) );
 	}
 }
+
+/**
+ * Ensure plugin pages exist on every request if they were removed or not created.
+ * This helps recover from missing pages and prevents 404s for key plugin routes.
+ */
+function enp_ensure_plugin_pages_exist() {
+	$slugs = array( 'et-admin', 'mentor', 'student', 'partner-with-us', 'psy-assessment' );
+	$missing = false;
+
+	foreach ( $slugs as $slug ) {
+		if ( ! get_page_by_path( $slug ) ) {
+			$missing = true;
+			break;
+		}
+	}
+
+	if ( ! $missing ) {
+		return;
+	}
+
+	enp_create_pages();
+	enp_psy_create_page();
+	flush_rewrite_rules();
+}
+add_action( 'init', 'enp_ensure_plugin_pages_exist' );

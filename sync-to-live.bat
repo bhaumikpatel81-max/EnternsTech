@@ -36,8 +36,9 @@ if "%FTP_USER%"=="your_ftp_username" (
 
 :: Find WinSCP
 set WINSCP=""
-if exist "C:\Program Files (x86)\WinSCP\WinSCP.com" set WINSCP="C:\Program Files (x86)\WinSCP\WinSCP.com"
-if exist "C:\Program Files\WinSCP\WinSCP.com"       set WINSCP="C:\Program Files\WinSCP\WinSCP.com"
+if exist "C:\Program Files (x86)\WinSCP\WinSCP.com"            set WINSCP="C:\Program Files (x86)\WinSCP\WinSCP.com"
+if exist "C:\Program Files\WinSCP\WinSCP.com"                  set WINSCP="C:\Program Files\WinSCP\WinSCP.com"
+if exist "%LOCALAPPDATA%\Programs\WinSCP\WinSCP.com"           set WINSCP="%LOCALAPPDATA%\Programs\WinSCP\WinSCP.com"
 
 if %WINSCP%=="" (
     echo.
