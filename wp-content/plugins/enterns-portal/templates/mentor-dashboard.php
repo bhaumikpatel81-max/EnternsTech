@@ -174,6 +174,4 @@ if ( $m_id ) {
 		<?php endforeach; ?>
 	</div>
 
-	<?php endif; ?>
-
-</div>
+	<?php endif; 

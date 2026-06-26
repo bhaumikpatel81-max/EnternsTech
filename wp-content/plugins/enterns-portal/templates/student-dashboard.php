@@ -436,7 +436,4 @@ $sessions_remaining = max( 0, (int) $student->sessions_total - (int) $student->s
     <div class="enp-notice enp-notice--info">
       <?php esc_html_e( 'No sessions booked yet. Your mentor will schedule the first session with you.', 'enterns-portal' ); ?>
     </div>
-    <?php endif; ?>
-  </section>
-
-</div><!-- .enp-wrap -->
+    <?php endif; 

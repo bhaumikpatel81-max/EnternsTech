@@ -74,11 +74,4 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 			<div class="enp-form-actions">
 				<button type="submit" class="enp-btn enp-btn--primary enp-btn--lg" id="enp-partner-submit">
-					<span class="enp-btn__text"><?php esc_html_e( 'Submit Application', 'enterns-portal' ); ?></span>
-					<span class="enp-btn__spinner" style="display:none;" aria-hidden="true"></span>
-				</button>
-			</div>
-		</form>
-	</div>
-
-</div>
+					<span class="enp-btn__text"><?php esc_html_e( 'Submit Application', 'enterns-portal' ); 

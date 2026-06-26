@@ -202,9 +202,4 @@ define( 'ENP_SMTP_FROM_NAME', 'Enterns Tech' );" ); ?></textarea>
 			<li><?php esc_html_e( 'Email From shows "Enterns Tech <admin@enternstech.com>".', 'enterns-portal' ); ?></li>
 			<li><?php esc_html_e( 'SPF, DKIM, and DMARC records added in DNS.', 'enterns-portal' ); ?></li>
 			<li><?php esc_html_e( 'Create a test user → Forgot Password → email arrives → link opens WP password screen.', 'enterns-portal' ); ?></li>
-			<li><?php esc_html_e( 'After setting password, login lands on correct portal (/mentor/ or /student/).', 'enterns-portal' ); ?></li>
-		</ul>
-
-	</div>
-	<?php
-}
+			<li><?php esc_html_e( 'After setting password, login lands on correct portal (/mentor/ or /student/).', 'enterns-portal' ); ?>

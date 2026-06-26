@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 // Auto-generated from Enterns_Psychometric_QuestionBank.xlsx � do not edit manually.
 // Contains correct answers and reverse_scored flags � server-side only, never expose to client.
 function enp_psy_question_bank(): array {

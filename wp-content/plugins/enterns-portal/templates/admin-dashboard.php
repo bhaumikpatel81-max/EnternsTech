@@ -47,7 +47,4 @@ $session_count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}enp_
 
 	<div class="enp-notice enp-notice--info" style="margin-top:2rem;">
 		<strong><?php esc_html_e( 'Phase 1 complete.', 'enterns-portal' ); ?></strong>
-		<?php esc_html_e( 'Mentor applications, student management, payments, and session tracking are being built in Phases 3–6.', 'enterns-portal' ); ?>
-	</div>
-
-</div>
+		<?php esc_html_e( 'Mentor applications, student management, payments, and session tracking are being built in Phases 3–6.', 'enterns-portal' ); 

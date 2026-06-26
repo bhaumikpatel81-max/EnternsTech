@@ -31,8 +31,4 @@ if ( empty( $login_url ) ) {
 		<p class="enp-login-card__foot">
 			<?php esc_html_e( 'Not enrolled yet?', 'enterns-portal' ); ?>
 			<a href="<?php echo esc_url( home_url( '/partner-with-us/' ) ); ?>">
-				<?php esc_html_e( 'Apply to mentor', 'enterns-portal' ); ?>
-			</a>
-		</p>
-	</div>
-</div>
+				<?php esc_html_e( 'Apply to mentor', 'enterns-portal' ); 

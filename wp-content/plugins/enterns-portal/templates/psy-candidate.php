@@ -263,9 +263,4 @@ $token = sanitize_text_field( wp_unslash( $_GET['t'] ?? '' ) );
         <?php esc_html_e( 'Your assessment has been submitted successfully. Our team will be in touch with you regarding next steps.', 'enterns-portal' ); ?>
       </p>
       <p class="enp-psy__body" style="margin-top:.5rem">
-        <?php esc_html_e( 'You may now close this window.', 'enterns-portal' ); ?>
-      </p>
-    </div>
-  </div>
-
-</div><!-- #enp-psy-root -->
+        <?php esc_html_e( 'You may now close this window.', 'enterns-portal' ); 
